@@ -1,0 +1,142 @@
+{% extends 'base.html' %}
+
+{% block title %}Interactive USSD Simulator (*384*20#) — VenomLink{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Interactive USSD Handset Simulator</h1>
+    <p class="page-description">
+      Test and verify the offline telco protocol (*384*20#) directly inside the browser.
+      Simulates both health facility reporter workflows and patient emergency searches.
+    </p>
+  </div>
+</div>
+
+<div class="ussd-workspace-grid">
+  <!-- Feature Phone Handset Mockup -->
+  <div>
+    <div class="feature-phone-mockup">
+      <div class="phone-speaker"></div>
+
+      <!-- Caller Identity / SIM Configuration -->
+      <div style="margin-bottom: 10px;">
+        <label for="sim-phone-select" style="font-size: 0.74rem; color: #B0BEC5; display: block; margin-bottom: 4px;">
+          Simulate Caller Identity / SIM:
+        </label>
+        <select id="sim-phone-select" class="form-control" style="background-color: #1E272C; color: #FFFFFF; font-size: 0.8rem; border-color: #4F5D65;">
+          <optgroup label="Registered Facility Staff (Staff Menu)">
+            {% for rep in reporters %}
+              <option value="{{ rep.phone_number }}">
+                {{ rep.facility.name }} &bull; {{ rep.get_role_display }} ({{ rep.phone_number }})
+              </option>
+            {% empty %}
+              <option value="+2348030000001">Kaltungo General Hospital &bull; Pharmacist (+2348030000001)</option>
+            {% endfor %}
+          </optgroup>
+          <optgroup label="Public Citizen / Patient / Relative">
+            <option value="+2348091122334">Patient Relative &bull; Gombe (+2348091122334)</option>
+            <option value="+2348075544332">Community Health Worker &bull; Plateau (+2348075544332)</option>
+          </optgroup>
+        </select>
+      </div>
+
+      <!-- USSD Screen Output (Monospace Terminal) -->
+      <div id="ussd-screen" class="ussd-screen-display" aria-live="polite">
+        Connecting to VenomLink (*384*20#)...
+      </div>
+
+      <!-- Text / Dial Input Field -->
+      <div class="ussd-input-row">
+        <input
+          type="text"
+          id="ussd-input"
+          placeholder="Enter choice..."
+          autocomplete="off"
+          class="ussd-input-field"
+        >
+        <button id="ussd-send-btn" class="btn btn-primary btn-sm" style="padding: 0 16px;">
+          Send
+        </button>
+      </div>
+
+      <!-- Phone Keypad Grid -->
+      <div class="ussd-keypad-grid">
+        <button type="button" class="keypad-btn" data-key="1">1</button>
+        <button type="button" class="keypad-btn" data-key="2">2</button>
+        <button type="button" class="keypad-btn" data-key="3">3</button>
+        <button type="button" class="keypad-btn" data-key="4">4</button>
+        <button type="button" class="keypad-btn" data-key="5">5</button>
+        <button type="button" class="keypad-btn" data-key="6">6</button>
+        <button type="button" class="keypad-btn" data-key="7">7</button>
+        <button type="button" class="keypad-btn" data-key="8">8</button>
+        <button type="button" class="keypad-btn" data-key="9">9</button>
+        <button type="button" class="keypad-btn" data-key="CLR" style="color: #FF7675;">CLR</button>
+        <button type="button" class="keypad-btn" data-key="0">0</button>
+        <button type="button" class="keypad-btn" data-key="SEND" style="color: #55EFC4;">OK</button>
+      </div>
+
+      <div style="margin-top: 14px; text-align: center;">
+        <button id="ussd-reset-btn" class="btn btn-secondary btn-sm" style="width: 100%; background: #1E272C; color: #CFD8DC; border-color: #4F5D65;">
+          Redial *384*20# (New Session)
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Operational Flow Guide & SMS Inbox Preview -->
+  <div>
+    <!-- Interactive Flow Guide -->
+    <div class="info-panel">
+      <div class="info-panel-title">USSD Interactive Verification Scenarios</div>
+      <p style="font-size: 0.84rem; color: #546E7A; margin-bottom: 14px;">
+        Use the keypad on the left or type numbers directly into the prompt to execute complete telco sessions.
+      </p>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+        <div style="background-color: var(--color-surface-subtle); padding: 12px; border-radius: var(--radius-sm); border: 1px solid var(--color-border);">
+          <strong style="color: var(--color-primary); font-size: 0.88rem;">1. Update Stock Flow (Feature 1)</strong>
+          <ol style="margin-left: 18px; margin-top: 6px; font-size: 0.82rem; color: #546E7A; line-height: 1.5;">
+            <li>Select staff SIM (e.g. Kaltungo Pharmacist)</li>
+            <li>Dial <strong>1</strong> (Update antivenom stock)</li>
+            <li>Enter 4-digit Staff PIN (Demo: <strong>1234</strong>)</li>
+            <li>Enter new vial count (e.g. <strong>6</strong>)</li>
+            <li>Enter batch expiry (e.g. <strong>06/27</strong>)</li>
+            <li>Confirmation returned &amp; DB updated</li>
+          </ol>
+        </div>
+
+        <div style="background-color: var(--color-surface-subtle); padding: 12px; border-radius: var(--radius-sm); border: 1px solid var(--color-border);">
+          <strong style="color: var(--color-primary); font-size: 0.88rem;">2. Find Antivenom (Feature 2)</strong>
+          <ol style="margin-left: 18px; margin-top: 6px; font-size: 0.82rem; color: #546E7A; line-height: 1.5;">
+            <li>Select Patient Relative SIM</li>
+            <li>Dial <strong>1</strong> (Find antivenom near you)</li>
+            <li>Select State (e.g. <strong>1</strong> for Gombe)</li>
+            <li>Select LGA (e.g. <strong>1</strong> for Kaltungo)</li>
+            <li>Ranked results returned + SMS dispatched</li>
+          </ol>
+        </div>
+      </div>
+    </div>
+
+    <!-- Handset SMS Inbox Preview -->
+    <div class="ussd-sms-inbox-preview">
+      <div class="info-panel-title" style="display: flex; justify-content: space-between; align-items: center;">
+        <span>Handset SMS Message Received</span>
+        <span style="font-size: 0.74rem; color: #546E7A; font-weight: normal;">Telco SMS Dispatch Service</span>
+      </div>
+
+      <div id="sms-inbox-container">
+        <div style="color: #546E7A; font-size: 0.84rem; font-style: italic; padding: 12px 0;">
+          No SMS notifications received yet. When you run "Find Antivenom" in the USSD handset, the confirmation SMS will appear here automatically.
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="/static/js/ussd_simulator.js"></script>
+{% endblock %}
+

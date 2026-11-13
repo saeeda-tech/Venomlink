@@ -1,0 +1,116 @@
+{% extends 'base.html' %}
+
+{% block title %}Potential Redistribution — VenomLink{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Potential Redistribution Recommendations</h1>
+    <p class="page-description">
+      Lateral antivenom supply balancing algorithm matching facilities with safe inventory surpluses to nearby facilities facing imminent stock-outs.
+    </p>
+  </div>
+</div>
+
+<div class="flash-alert" style="background-color: #E8F3F0; border: 1px solid #B2D1C9; color: var(--color-primary-dark); margin-bottom: 20px;">
+  <strong>Logistics Protocol:</strong> The recommendations below are decision-support advisories intended for State Health Logistics Officers.
+  <strong>Review for possible redistribution.</strong> All medical supply relocations require formal approval and cold-chain compliance.
+</div>
+
+{% for rec in recommendations %}
+  <div class="redistribution-card">
+    <div class="redistribution-header">
+      <div>
+        <span class="severity-pill {% if rec.urgency == 'CRITICAL' %}critical{% else %}warning{% endif %}">
+          {{ rec.urgency }} URGENCY
+        </span>
+        <strong style="margin-left: 8px; font-size: 0.95rem;">
+          Suggested Relocation: {{ rec.suggested_quantity }} Vials
+        </strong>
+      </div>
+      <div style="font-size: 0.85rem; color: #546E7A;">
+        Transit Distance: <strong>{{ rec.distance_km }} km</strong>
+      </div>
+    </div>
+
+    <div class="redistribution-flow">
+      <!-- Donor Node -->
+      <div class="facility-transfer-node">
+        <div style="font-size: 0.76rem; text-transform: uppercase; color: #1E7E34; font-weight: 700;">
+          Source Facility (Surplus Available)
+        </div>
+        <div style="font-size: 1.05rem; font-weight: 700; color: var(--color-slate); margin: 4px 0;">
+          {{ rec.donor_name }}
+        </div>
+        <div style="font-size: 0.8rem; color: #546E7A;">
+          LGA: {{ rec.donor_lga }}, {{ rec.donor_state }}
+        </div>
+        <div style="margin-top: 8px; font-size: 0.88rem;">
+          Current Stock: <strong>{{ rec.donor_stock }} vials</strong> ({{ rec.donor_days_of_cover_display }})
+        </div>
+        <div style="font-size: 0.78rem; color: #1E7E34; margin-top: 2px;">
+          Healthy inventory with low recent usage (Batch: {{ rec.donor_expiry }})
+        </div>
+      </div>
+
+      <!-- Arrow Flow & Quantity -->
+      <div class="transfer-arrow-box">
+        <div class="transfer-arrow">&rarr;</div>
+        <div style="font-size: 0.9rem; font-weight: 700; color: var(--color-primary);">
+          {{ rec.suggested_quantity }} VIALS
+        </div>
+        <div style="font-size: 0.74rem; color: #546E7A;">{{ rec.distance_km }} km</div>
+      </div>
+
+      <!-- Recipient Node -->
+      <div class="facility-transfer-node" style="border-left: 4px solid var(--color-status-critical);">
+        <div style="font-size: 0.76rem; text-transform: uppercase; color: #B71C1C; font-weight: 700;">
+          Target Facility (Deficit / Stockout Risk)
+        </div>
+        <div style="font-size: 1.05rem; font-weight: 700; color: var(--color-slate); margin: 4px 0;">
+          {{ rec.recipient_name }}
+        </div>
+        <div style="font-size: 0.8rem; color: #546E7A;">
+          LGA: {{ rec.recipient_lga }}, {{ rec.recipient_state }}
+        </div>
+        <div style="margin-top: 8px; font-size: 0.88rem;">
+          Current Stock: <strong style="color: #B71C1C;">{{ rec.recipient_stock }} vials</strong> ({{ rec.recipient_days_of_cover_display }})
+        </div>
+        <div style="font-size: 0.78rem; color: #B71C1C; margin-top: 2px;">
+          {% if rec.recipient_days_of_cover is not None %}
+            Likely stock-out within {{ rec.recipient_days_of_cover|floatformat:0 }} day(s)
+          {% else %}
+            Critical physical stock threshold ({{ rec.recipient_stock }} vials)
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 14px; flex-wrap: wrap; gap: 10px;">
+      <div class="redistribution-disclaimer">
+        {{ rec.notice }}
+      </div>
+
+      <!-- Action Form for Authorizing Transfer -->
+      <form method="post" action="{% url 'dashboard:redistribution' %}">
+        {% csrf_token %}
+        <input type="hidden" name="source_facility_id" value="{{ rec.donor_facility_id }}">
+        <input type="hidden" name="target_facility_id" value="{{ rec.recipient_facility_id }}">
+        <input type="hidden" name="quantity" value="{{ rec.suggested_quantity }}">
+        <input type="hidden" name="notes" value="Approved redistribution transfer: {{ rec.suggested_quantity }} vials from {{ rec.donor_name }} to {{ rec.recipient_name }}.">
+        <button type="submit" class="btn btn-primary btn-sm" onclick="return confirm('Authorize and record transfer of {{ rec.suggested_quantity }} vials from {{ rec.donor_name }} to {{ rec.recipient_name }}?');">
+          Authorize &amp; Execute Transfer
+        </button>
+      </form>
+    </div>
+  </div>
+{% empty %}
+  <div class="data-table-card" style="padding: 40px; text-align: center; color: #546E7A;">
+    <h3>No Redistribution Pairs Currently Required</h3>
+    <p style="margin-top: 6px; font-size: 0.88rem;">
+      No critical stock disparities detected within transit distance bounds. All facilities possess balanced days of cover.
+    </p>
+  </div>
+{% endfor %}
+{% endblock %}
+

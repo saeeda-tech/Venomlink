@@ -1,0 +1,244 @@
+{% extends 'base.html' %}
+
+{% block title %}90-Second Operational Demo — VenomLink{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">90-Second Operational Story Demo</h1>
+    <p class="page-description">
+      Step-by-step verification of the end-to-end VenomLink lifecycle: Facility Stock Update &rarr; Patient Search &rarr; Dashboard Synchronization &rarr; Consumption Surge &rarr; Automated Critical Stockout Alert.
+    </p>
+  </div>
+  <div>
+    <span class="status-badge available" style="padding: 6px 12px; font-size: 0.88rem;">
+      Target Demo Facility: <strong>{{ demo_facility.name }}</strong>
+    </span>
+  </div>
+</div>
+
+<div class="data-table-card" style="padding: 24px;">
+  <!-- Step 1 -->
+  <div style="border-left: 3px solid var(--color-primary); padding-left: 16px; margin-bottom: 24px;">
+    <div style="font-size: 0.8rem; text-transform: uppercase; color: var(--color-primary); font-weight: 700;">
+      Step 1 of 6 &bull; Facility Stock Update
+    </div>
+    <h3 style="font-size: 1.1rem; color: var(--color-slate); margin: 4px 0 8px 0;">
+      Nurse / Pharmacist updates antivenom count to 6 vials
+    </h3>
+    <p style="font-size: 0.86rem; color: #546E7A; margin-bottom: 12px;">
+      Simulates an authorized stock count confirmation of <strong>6 vials</strong> (Expiry 03/27) at <strong>{{ demo_facility.name }}</strong> via USSD or Web.
+    </p>
+    <div style="display: flex; gap: 10px; align-items: center;">
+      <button class="btn btn-primary btn-sm" id="demo-step1-btn" onclick="executeDemoStep(1)">
+        Execute Step 1: Update Stock to 6 Vials
+      </button>
+      <span id="demo-step1-status" style="font-size: 0.84rem; font-weight: 600;"></span>
+    </div>
+  </div>
+
+  <!-- Step 2 -->
+  <div style="border-left: 3px solid var(--color-slate-light); padding-left: 16px; margin-bottom: 24px;" id="step2-container">
+    <div style="font-size: 0.8rem; text-transform: uppercase; color: var(--color-slate); font-weight: 700;">
+      Step 2 of 6 &bull; Patient Relative Searches for Antivenom
+    </div>
+    <h3 style="font-size: 1.1rem; color: var(--color-slate); margin: 4px 0 8px 0;">
+      User searches via USSD/SMS: State (Gombe) &rarr; LGA ({{ demo_facility.lga }})
+    </h3>
+    <p style="font-size: 0.86rem; color: #546E7A; margin-bottom: 12px;">
+      The matching engine evaluates <em>Availability</em>, <em>Distance</em>, <em>Freshness</em>, and <em>Stock Level</em>, returning {{ demo_facility.name }} as ranked #1 with an automated confirmation SMS.
+    </p>
+    <div style="display: flex; gap: 10px; align-items: center;">
+      <button class="btn btn-secondary btn-sm" id="demo-step2-btn" onclick="executeDemoStep(2)">
+        Execute Step 2: Search Antivenom
+      </button>
+      <span id="demo-step2-status" style="font-size: 0.84rem; font-weight: 600;"></span>
+    </div>
+    <div id="demo-step2-results" style="margin-top: 10px;"></div>
+  </div>
+
+  <!-- Step 3 -->
+  <div style="border-left: 3px solid var(--color-slate-light); padding-left: 16px; margin-bottom: 24px;" id="step3-container">
+    <div style="font-size: 0.8rem; text-transform: uppercase; color: var(--color-slate); font-weight: 700;">
+      Step 3 of 6 &bull; Dashboard Synchronisation
+    </div>
+    <h3 style="font-size: 1.1rem; color: var(--color-slate); margin: 4px 0 8px 0;">
+      State Official Dashboard reflects 6 vials &bull; Confirmed Today
+    </h3>
+    <p style="font-size: 0.86rem; color: #546E7A; margin-bottom: 12px;">
+      The map marker and table record show fresh stock data (6 vials) with zero delay.
+    </p>
+    <div style="display: flex; gap: 10px; align-items: center;">
+      <a href="{% url 'dashboard:facility-detail' demo_facility.id %}" target="_blank" class="btn btn-secondary btn-sm">
+        View {{ demo_facility.name }} Detail Record &rarr;
+      </a>
+      <a href="{% url 'dashboard:overview' %}" target="_blank" class="btn btn-secondary btn-sm">
+        View State Overview Map &rarr;
+      </a>
+    </div>
+  </div>
+
+  <!-- Step 4 -->
+  <div style="border-left: 3px solid var(--color-status-low); padding-left: 16px; margin-bottom: 24px;" id="step4-container">
+    <div style="font-size: 0.8rem; text-transform: uppercase; color: var(--color-status-low); font-weight: 700;">
+      Step 4 of 6 &bull; Severe Clinical Consumption Surge
+    </div>
+    <h3 style="font-size: 1.1rem; color: var(--color-slate); margin: 4px 0 8px 0;">
+      Simulate emergency snakebite treatment: 4 vials administered
+    </h3>
+    <p style="font-size: 0.86rem; color: #546E7A; margin-bottom: 12px;">
+      Stock drops from 6 vials down to <strong>2 vials</strong>. Days of cover plunges below lead time + safety cushion.
+    </p>
+    <div style="display: flex; gap: 10px; align-items: center;">
+      <button class="btn btn-secondary btn-sm" id="demo-step4-btn" onclick="executeDemoStep(4)" style="color: var(--color-status-low); border-color: var(--color-status-low);">
+        Execute Step 4: Administer 4 Vials (Simulate Usage)
+      </button>
+      <span id="demo-step4-status" style="font-size: 0.84rem; font-weight: 600;"></span>
+    </div>
+  </div>
+
+  <!-- Step 5 & 6 -->
+  <div style="border-left: 3px solid var(--color-status-critical); padding-left: 16px;" id="step5-container">
+    <div style="font-size: 0.8rem; text-transform: uppercase; color: var(--color-status-critical); font-weight: 700;">
+      Steps 5 &amp; 6 &bull; Automated Alert &amp; State Official Monitoring
+    </div>
+    <h3 style="font-size: 1.1rem; color: var(--color-slate); margin: 4px 0 8px 0;">
+      Critical Stock-Out Alert Generated &amp; Visible on Ministry Dashboard
+    </h3>
+    <p style="font-size: 0.86rem; color: #546E7A; margin-bottom: 12px;">
+      The stock intelligence engine calculates: <em>Days of Cover &le; Reorder Cushion</em>. Generates critical alert:
+      <strong style="color: #B71C1C;">"{{ demo_facility.name }} may run out of antivenom within 2 days."</strong>
+    </p>
+    <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+      <a href="{% url 'dashboard:alerts' %}" class="btn btn-primary btn-sm" style="background-color: var(--color-status-critical); border-color: #991B1B;">
+        View Alerts Dashboard &rarr;
+      </a>
+      <a href="{% url 'dashboard:redistribution' %}" class="btn btn-secondary btn-sm">
+        Review Redistribution Recommendations &rarr;
+      </a>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function executeDemoStep(step) {
+  const facId = {{ demo_facility.id }};
+  const reporterPhone = "{{ demo_reporter.phone_number|default:'+2348030000001' }}";
+  const csrfToken = window.getCsrfToken ? window.getCsrfToken() : '';
+  
+  if (step === 1) {
+    const status = document.getElementById('demo-step1-status');
+    status.textContent = 'Authenticating staff PIN & updating stock to 6 vials...';
+    status.style.color = '#546E7A';
+
+    fetch('/api/inventory/update-stock/', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': csrfToken
+      },
+      body: JSON.stringify({
+        facility_id: facId,
+        quantity: 6,
+        expiry_date: '06/27',
+        phone_number: reporterPhone,
+        pin: '1234',
+        notes: '90-Second Demo: Verified Physical Count'
+      })
+    })
+      .then(async res => {
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || JSON.stringify(data));
+        return data;
+      })
+      .then(data => {
+        status.textContent = 'Stock recorded: 6 vials (Expiry: 06/27). Confirmed today.';
+        status.style.color = '#1E7E34';
+      })
+      .catch(e => {
+        status.textContent = 'Error: ' + e.message;
+        status.style.color = '#B71C1C';
+      });
+  }
+  
+  else if (step === 2) {
+    const status = document.getElementById('demo-step2-status');
+    const container = document.getElementById('demo-step2-results');
+    status.textContent = 'Searching matching engine...';
+    status.style.color = '#546E7A';
+
+    fetch('/api/matching/search/', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': csrfToken
+      },
+      body: JSON.stringify({
+        state: '{{ demo_facility.state }}',
+        lga: '{{ demo_facility.lga }}',
+        limit: 2,
+        channel: 'USSD'
+      })
+    })
+      .then(async res => {
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || JSON.stringify(data));
+        return data;
+      })
+      .then(data => {
+        status.textContent = 'Search successful. Found ' + data.count + ' matching facilities:';
+        status.style.color = '#1E7E34';
+
+        let html = '<div style="background: #F1F3F0; padding: 10px; border-radius: 4px; font-size: 0.82rem; font-family: monospace;">';
+        data.results.forEach((r, idx) => {
+          html += `<div><strong>${idx + 1}. ${r.name}</strong> &bull; ${r.stock} vials &bull; ${r.last_confirmed_label} &bull; Score: ${r.ranking_score} &bull; Call: ${r.phone}</div>`;
+        });
+        html += '<div style="color: #1E7E34; margin-top: 4px;">&check; SMS confirmation dispatched to caller.</div></div>';
+        container.innerHTML = html;
+      })
+      .catch(e => {
+        status.textContent = 'Error: ' + e.message;
+        status.style.color = '#B71C1C';
+      });
+  }
+
+  else if (step === 4) {
+    const status = document.getElementById('demo-step4-status');
+    status.textContent = 'Authenticating staff PIN & recording case (4 vials)...';
+    status.style.color = '#546E7A';
+
+    fetch('/api/inventory/report-case/', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': csrfToken
+      },
+      body: JSON.stringify({
+        facility_id: facId,
+        vials_used: 4,
+        outcome: 'RECOVERED',
+        phone_number: reporterPhone,
+        pin: '1234',
+        notes: '90-Second Demo: Severe envenomation surge'
+      })
+    })
+      .then(async res => {
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || JSON.stringify(data));
+        return data;
+      })
+      .then(data => {
+        status.textContent = 'Clinical case logged. 4 vials deducted! Stock is now 2 vials (Critical threshold reached).';
+        status.style.color = '#B71C1C';
+      })
+      .catch(e => {
+        status.textContent = 'Error: ' + e.message;
+        status.style.color = '#B71C1C';
+      });
+  }
+}
+</script>
+{% endblock %}
+

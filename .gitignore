@@ -1,0 +1,18 @@
+# Python & Django
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+.env
+db.sqlite3
+staticfiles/
+*.log
+.pytest_cache/
+tools/
+backups/
+pgdata/
+*.dump
+*.bak
+*.sqlite3*
+*.pw

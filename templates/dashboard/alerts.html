@@ -1,0 +1,147 @@
+{% extends 'base.html' %}
+
+{% block title %}Operational Alerts — VenomLink{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Operational Alerts</h1>
+    <p class="page-description">
+      Automated exception intelligence flagging potential stock-outs, low cover, overdue confirmations, and batch
+      expiries.
+    </p>
+  </div>
+  <div style="display: flex; gap: 8px;">
+    {% if request.user.is_authenticated %}
+    <form method="post" action="/api/analytics/evaluate/">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-secondary btn-sm"
+        onclick="event.preventDefault(); fetch('/api/analytics/evaluate/', {method: 'POST', headers: {'X-CSRFToken': window.getCsrfToken ? window.getCsrfToken() : ''}}).then(() => window.location.reload());">
+        Re-evaluate All Facilities
+      </button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+
+<div class="data-table-card">
+  <!-- Table Filter Toolbar -->
+  <form method="get" class="filter-toolbar">
+    <input type="hidden" name="state" value="{{ state_filter }}">
+    <input type="hidden" name="period" value="{{ selected_period }}">
+
+    <div style="display: flex; align-items: center; gap: 8px;">
+      <label for="severity-filter" style="font-size: 0.84rem; font-weight: 600;">Severity:</label>
+      <select id="severity-filter" name="severity" class="control-select" onchange="this.form.submit()">
+        <option value="">All Severities</option>
+        {% for code, label in severity_choices %}
+        <option value="{{ code }}" {% if severity_filter == code %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 8px;">
+      <label for="type-filter" style="font-size: 0.84rem; font-weight: 600;">Alert Type:</label>
+      <select id="type-filter" name="type" class="control-select" onchange="this.form.submit()">
+        <option value="">All Alert Types</option>
+        {% for code, label in type_choices %}
+        <option value="{{ code }}" {% if type_filter == code %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 8px;">
+      <label for="status-filter" style="font-size: 0.84rem; font-weight: 600;">Status:</label>
+      <select id="status-filter" name="status" class="control-select" onchange="this.form.submit()">
+        <option value="OPEN" {% if status_filter != 'RESOLVED' %}selected{% endif %}>Active &amp; Acknowledged</option>
+        <option value="RESOLVED" {% if status_filter == 'RESOLVED' %}selected{% endif %}>Resolved History</option>
+      </select>
+    </div>
+
+    {% if severity_filter or type_filter or status_filter == 'RESOLVED' %}
+    <a href="{% url 'dashboard:alerts' %}?state={{ state_filter }}&amp;period={{ selected_period }}" class="btn btn-secondary btn-sm">Clear Filters</a>
+    {% endif %}
+  </form>
+
+  <div class="table-responsive">
+    <table class="gov-table" aria-label="Operational Alerts Table">
+      <thead>
+        <tr>
+          <th style="width: 110px;">Severity</th>
+          <th style="width: 210px;">Facility</th>
+          <th>Alert Condition</th>
+          <th style="width: 170px;">Current Status</th>
+          <th style="width: 130px;">Last Updated</th>
+          <th style="width: 180px; text-align: center;">Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for alert in alerts %}
+        <tr>
+          <td>
+            <span class="severity-pill {{ alert.severity|lower }}">
+              {{ alert.get_severity_display }}
+            </span>
+            {% if alert.status == 'ACKNOWLEDGED' %}
+              <div style="font-size: 0.72rem; color: #0B5D4B; font-weight: 600; margin-top: 3px;">Acknowledged</div>
+            {% elif alert.status == 'RESOLVED' %}
+              <div style="font-size: 0.72rem; color: #546E7A; font-weight: 600; margin-top: 3px;">Resolved</div>
+            {% endif %}
+          </td>
+          <td>
+            <strong>{{ alert.facility.name }}</strong>
+            <div style="font-size: 0.78rem; color: #546E7A;">{{ alert.facility.lga }}, {{ alert.facility.state }}</div>
+          </td>
+          <td>
+            <div>{{ alert.message }}</div>
+            <div style="font-size: 0.78rem; color: #546E7A; margin-top: 2px;">
+              Category: <strong>{{ alert.get_alert_type_display }}</strong>
+            </div>
+          </td>
+          <td>
+            <div><strong>{{ alert.current_stock }} vials</strong> remaining</div>
+            <div style="font-size: 0.78rem; color: #546E7A;">
+              {% if alert.days_of_cover is not None %}
+                {{ alert.days_of_cover }} days of cover
+              {% else %}
+                Insufficient usage history
+              {% endif %}
+            </div>
+          </td>
+          <td style="font-size: 0.82rem; color: #546E7A; white-space: nowrap;">
+            {{ alert.created_at|date:"d M Y, H:i" }}
+          </td>
+          <td style="text-align: center;">
+            <div style="display: flex; gap: 6px; justify-content: center; flex-wrap: wrap;">
+              <a href="{% url 'dashboard:facility-detail' alert.facility.id %}" class="btn-action-view">View</a>
+              {% if request.user.is_authenticated and alert.status != 'RESOLVED' %}
+                {% if alert.status == 'ACTIVE' %}
+                  <form method="post" style="display: inline;">
+                    {% csrf_token %}
+                    <input type="hidden" name="alert_id" value="{{ alert.id }}">
+                    <input type="hidden" name="action" value="acknowledge">
+                    <button type="submit" class="btn-action-view" style="cursor: pointer; background: #FFF; border: 1px solid #B0BEC5;">Ack</button>
+                  </form>
+                {% endif %}
+                <form method="post" style="display: inline;">
+                  {% csrf_token %}
+                  <input type="hidden" name="alert_id" value="{{ alert.id }}">
+                  <input type="hidden" name="action" value="resolve">
+                  <button type="submit" class="btn-action-view" style="cursor: pointer; background: #E8F3F0; border: 1px solid #0B5D4B; color: #0B5D4B;">Resolve</button>
+                </form>
+              {% endif %}
+            </div>
+          </td>
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="6" style="text-align: center; color: #546E7A; padding: 36px;">
+            No matching alerts found for current criteria.
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

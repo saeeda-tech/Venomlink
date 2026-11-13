@@ -1,0 +1,131 @@
+{% extends 'base.html' %}
+
+{% block title %}Facilities Directory — VenomLink{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Health Facilities Registry</h1>
+    <p class="page-description">
+      Master operational registry of accredited treatment centres, current recorded antivenom stock, batch expiry status, and verification freshness ({{ period_days }}-day window).
+    </p>
+  </div>
+</div>
+
+<div class="data-table-card">
+  <!-- Table Filter Toolbar -->
+  <form method="get" class="filter-toolbar">
+    <input type="hidden" name="state" value="{{ state_filter }}">
+    <input type="hidden" name="period" value="{{ selected_period }}">
+
+    <input
+      type="text"
+      name="q"
+      value="{{ search_query }}"
+      placeholder="Search facility name, LGA, or phone..."
+      class="search-input"
+    >
+
+    <div style="display: flex; align-items: center; gap: 6px;">
+      <label for="lga-select" style="font-size: 0.84rem; font-weight: 600;">LGA:</label>
+      <select id="lga-select" name="lga" class="control-select" onchange="this.form.submit()">
+        <option value="">All LGAs</option>
+        {% for l in available_lgas %}
+          <option value="{{ l }}" {% if lga_filter == l %}selected{% endif %}>{{ l }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 6px;">
+      <label for="status-select" style="font-size: 0.84rem; font-weight: 600;">Stock Status:</label>
+      <select id="status-select" name="status" class="control-select" onchange="this.form.submit()">
+        <option value="">All Statuses</option>
+        <option value="AVAILABLE" {% if status_filter == 'AVAILABLE' %}selected{% endif %}>Available</option>
+        <option value="LOW" {% if status_filter == 'LOW' %}selected{% endif %}>Low Stock</option>
+        <option value="CRITICAL" {% if status_filter == 'CRITICAL' %}selected{% endif %}>Critical / Stockout</option>
+        <option value="UNCONFIRMED" {% if status_filter == 'UNCONFIRMED' %}selected{% endif %}>Unconfirmed</option>
+      </select>
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 6px;">
+      <label for="freshness-select" style="font-size: 0.84rem; font-weight: 600;">Data Freshness:</label>
+      <select id="freshness-select" name="freshness" class="control-select" onchange="this.form.submit()">
+        <option value="">All Confirmations</option>
+        <option value="TODAY" {% if freshness_filter == 'TODAY' %}selected{% endif %}>Confirmed Today (&le; 24h)</option>
+        <option value="RECENT" {% if freshness_filter == 'RECENT' %}selected{% endif %}>Recent (24-48h)</option>
+        <option value="STALE" {% if freshness_filter == 'STALE' %}selected{% endif %}>Overdue (&gt; 48h)</option>
+      </select>
+    </div>
+
+    <button type="submit" class="btn btn-secondary btn-sm">Filter</button>
+    {% if search_query or lga_filter or status_filter or freshness_filter %}
+      <a href="{% url 'dashboard:facilities' %}?state={{ state_filter }}&amp;period={{ selected_period }}" class="btn btn-secondary btn-sm">Clear</a>
+    {% endif %}
+  </form>
+
+  <div class="table-responsive">
+    <table class="gov-table" aria-label="Facilities Table">
+      <thead>
+        <tr>
+          <th>Facility Name</th>
+          <th>LGA</th>
+          <th>Batch Expiry</th>
+          <th style="text-align: right;">Usable Stock &amp; Cover</th>
+          <th>Last Confirmation</th>
+          <th>Status</th>
+          <th style="text-align: center;">Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for fac in facilities %}
+          <tr>
+            <td>
+              <a href="{% url 'dashboard:facility-detail' fac.id %}" style="font-weight: 600; color: var(--color-primary); text-decoration: none;">
+                {{ fac.name }}
+              </a>
+              <div style="font-size: 0.78rem; color: #546E7A;">
+                {{ fac.get_facility_type_display }} &bull; {{ fac.phone }} &bull; {{ fac.state }}
+              </div>
+            </td>
+            <td><strong>{{ fac.lga }}</strong></td>
+            <td style="font-size: 0.84rem;">
+              <div><strong>{{ fac.latest_expiry }}</strong></div>
+              <div style="font-size: 0.75rem; {% if fac.expiry_status == 'EXPIRED' %}color: #B71C1C; font-weight: 700;{% elif fac.expiry_status == 'EXPIRING_SOON' %}color: #D97706; font-weight: 600;{% else %}color: #546E7A;{% endif %}">
+                {{ fac.expiry_status_label }}
+              </div>
+            </td>
+            <td style="text-align: right; font-variant-numeric: tabular-nums;">
+              <strong style="font-size: 1.05rem;">{{ fac.usable_stock }}</strong> vials
+              <div style="font-size: 0.76rem; color: #546E7A;">
+                {{ fac.period_doc }}
+              </div>
+              <div style="font-size: 0.72rem; color: #78909C;">
+                {{ fac.period_confidence_label }}
+              </div>
+            </td>
+            <td>
+              <span class="freshness-tag {% if fac.is_stale %}urgent-warning{% endif %}">
+                {{ fac.freshness_label }}
+              </span>
+            </td>
+            <td>
+              <span class="status-badge {{ fac.stock_status|lower }}">
+                {{ fac.stock_status_label }}
+              </span>
+            </td>
+            <td style="text-align: center;">
+              <a href="{% url 'dashboard:facility-detail' fac.id %}" class="btn-action-view">View</a>
+            </td>
+          </tr>
+        {% empty %}
+          <tr>
+            <td colspan="7" style="text-align: center; color: #546E7A; padding: 36px;">
+              No facilities found matching current filters.
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

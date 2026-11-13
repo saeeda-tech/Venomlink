@@ -1,0 +1,243 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ facility.name }} — Facility Record — VenomLink{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <div style="font-size: 0.85rem; color: #546E7A; margin-bottom: 2px;">
+      <a href="{% url 'dashboard:facilities' %}?state={{ selected_state }}&amp;period={{ selected_period }}" style="color: var(--color-primary); text-decoration: none;">&larr; Back to Facilities Directory</a>
+    </div>
+    <h1 class="page-title">{{ facility.name }}</h1>
+    <p class="page-description">
+      {{ facility.get_facility_type_display }} &bull; {{ facility.lga }} Local Government Area, {{ facility.state }} State
+    </p>
+  </div>
+  <div style="display: flex; gap: 8px;">
+    <span class="status-badge {{ facility.stock_status|lower }}" style="font-size: 0.9rem; padding: 6px 12px;">
+      Status: {{ facility.stock_status_label }}
+    </span>
+  </div>
+</div>
+
+<!-- Active Alerts for this facility -->
+{% if active_alerts %}
+  <div style="margin-bottom: 20px;">
+    {% for alert in active_alerts %}
+      <div class="flash-alert error" style="display: flex; justify-content: space-between; align-items: center;">
+        <div>
+          <strong>{{ alert.get_severity_display }} ALERT:</strong> {{ alert.message }}
+        </div>
+        <span style="font-size: 0.78rem; opacity: 0.8;">Triggered {{ alert.created_at|date:"d M, H:i" }}</span>
+      </div>
+    {% endfor %}
+  </div>
+{% endif %}
+
+<!-- Key Metrics Row -->
+<div class="info-metrics-row">
+  <div class="metric-item">
+    <div class="label">Usable Available Stock</div>
+    <div class="value">{{ facility.usable_stock }} <span style="font-size: 0.9rem; font-weight: normal; color: #546E7A;">vials</span></div>
+    <div style="font-size: 0.76rem; color: #546E7A; margin-top: 4px;">
+      Physical inventory on hand: <strong>{{ facility.current_stock }} vials</strong>
+      {% if facility.has_expired_stock %}
+        <span style="color: #B71C1C; font-weight: 700;">(Batch Expired)</span>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="metric-item">
+    <div class="label">Days of Cover</div>
+    <div class="value">
+      {% if facility.days_of_cover is not None %}
+        {{ facility.days_of_cover }} <span style="font-size: 0.9rem; font-weight: normal; color: #546E7A;">days</span>
+      {% else %}
+        <span style="font-size: 1.05rem; color: #546E7A;">Unavailable</span>
+      {% endif %}
+    </div>
+    <div style="font-size: 0.76rem; color: #546E7A; margin-top: 4px;">
+      Usage: {{ facility.calculate_average_daily_usage }} vials/day &bull; {{ facility.consumption_confidence_label }}
+    </div>
+  </div>
+
+  <div class="metric-item">
+    <div class="label">Data Freshness &amp; Batch Expiry</div>
+    <div class="value" style="font-size: 1.15rem; margin-top: 6px;">{{ facility.freshness_label }}</div>
+    <div style="font-size: 0.76rem; color: #546E7A; margin-top: 4px;">
+      Nearest expiry: <strong>{{ facility.latest_expiry }}</strong>
+      (<span style="{% if facility.expiry_status == 'EXPIRED' %}color: #B71C1C; font-weight: 700;{% elif facility.expiry_status == 'EXPIRING_SOON' %}color: #D97706; font-weight: 600;{% else %}color: #1E7E34;{% endif %}">{{ facility.expiry_status_label }}</span>)
+    </div>
+  </div>
+</div>
+
+<div class="detail-grid">
+  <!-- Left Column: Stock Trend Chart & Comprehensive Audit Trail -->
+  <div>
+    <!-- Stock Trend Chart (Canvas) -->
+    <div class="info-panel">
+      <div class="info-panel-title">Stock History Trend</div>
+      <div style="margin-bottom: 12px; font-size: 0.82rem; color: #546E7A;">
+        Recorded physical vial counts over recent audit updates.
+      </div>
+      <canvas id="facility-stock-chart" data-points='{{ chart_points_json|safe }}' style="width: 100%; height: 200px;"></canvas>
+    </div>
+
+    <!-- Recent Activity Audit Trail (Section 15) -->
+    <div class="info-panel">
+      <div class="info-panel-title">Recent Activity Audit Trail</div>
+      <p style="font-size: 0.82rem; color: #546E7A; margin-bottom: 16px;">
+        Chronological ledger of stock confirmations, patient treatments, and transfers.
+      </p>
+
+      <ul class="audit-timeline">
+        {% for item in timeline %}
+          <li class="timeline-item">
+            <span class="timeline-marker {% if item.badge == 'case' %}case{% endif %}"></span>
+            <div class="timeline-date">{{ item.date|date:"d M Y, H:i" }}</div>
+            <div class="timeline-title">{{ item.title }}</div>
+            <div class="timeline-desc">{{ item.detail }}</div>
+          </li>
+        {% empty %}
+          <li class="timeline-item">
+            <div class="timeline-title">No transactions recorded yet.</div>
+          </li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+
+  <!-- Right Column: Facility Metadata & Operational Actions -->
+  <div>
+    <!-- Facility Operational Info -->
+    <div class="info-panel">
+      <div class="info-panel-title">Facility Information</div>
+      <div class="popup-row">
+        <span class="popup-label">Emergency Phone:</span>
+        <span class="popup-value">
+          <a href="tel:{{ facility.phone }}" style="color: var(--color-primary); font-weight: 600; text-decoration: none;">
+            {{ facility.phone }}
+          </a>
+        </span>
+      </div>
+      <div class="popup-row">
+        <span class="popup-label">State / LGA:</span>
+        <span class="popup-value">{{ facility.state }} &bull; {{ facility.lga }}</span>
+      </div>
+      <div class="popup-row">
+        <span class="popup-label">GPS Coordinates:</span>
+        <span class="popup-value">{{ facility.latitude }}, {{ facility.longitude }}</span>
+      </div>
+      <div class="popup-row">
+        <span class="popup-label">Resupply Lead Time:</span>
+        <span class="popup-value">{{ facility.resupply_lead_time_days }} days</span>
+      </div>
+      <div class="popup-row">
+        <span class="popup-label">Safety Buffer:</span>
+        <span class="popup-value">{{ facility.safety_buffer_days }} days</span>
+      </div>
+      <div class="popup-row">
+        <span class="popup-label">Verification:</span>
+        <span class="popup-value" style="color: #1E7E34; font-weight: 600;">Verified Health Facility</span>
+      </div>
+      <div id="facility-detail-map"
+           data-lat="{{ facility.latitude }}"
+           data-lon="{{ facility.longitude }}"
+           data-name="{{ facility.name }}"
+           data-stock="{{ facility.usable_stock }}"
+           data-color="{{ facility.stock_status_color }}"
+           style="width: 100%; height: 200px; margin-top: 12px; border: 1px solid var(--color-border); border-radius: var(--radius-sm);">
+      </div>
+    </div>
+
+    <!-- Authorized Staff Action: Update Stock -->
+    <div class="info-panel">
+      <div class="info-panel-title">Authorized Stock Update</div>
+      <form method="post" action="{% url 'dashboard:facility-detail' facility.id %}">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="update_stock">
+
+        {% if not request.user.is_authenticated %}
+          <div class="form-group">
+            <label class="form-label" for="stock-reporter-phone">Registered Reporter Phone:</label>
+            <input type="text" id="stock-reporter-phone" name="reporter_phone" placeholder="+234803..." required class="form-control">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="stock-staff-pin">4-Digit Staff PIN:</label>
+            <input type="password" id="stock-staff-pin" name="staff_pin" maxlength="8" placeholder="Enter Staff PIN" required class="form-control">
+          </div>
+        {% endif %}
+
+        <div class="form-group">
+          <label class="form-label" for="quantity-input">Physical Vials on Hand (Whole Number):</label>
+          <input type="number" id="quantity-input" name="quantity" min="0" value="{{ facility.current_stock }}" required class="form-control">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="expiry-input">Nearest Batch Expiry (MM/YY):</label>
+          <input type="text" id="expiry-input" name="expiry_date" placeholder="e.g. 06/27" pattern="^(0[1-9]|1[0-2])\/([0-9]{2})$" value="{% if facility.latest_expiry != 'Not recorded' %}{{ facility.latest_expiry }}{% endif %}" class="form-control">
+          <div class="form-help">Format: MM/YY (must be a non-expired batch)</div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="notes-input">Audit Notes (Optional):</label>
+          <input type="text" id="notes-input" name="notes" placeholder="e.g. Weekly physical verification" class="form-control">
+        </div>
+
+        <button type="submit" class="btn btn-primary" style="width: 100%;">
+          Commit Stock Count
+        </button>
+      </form>
+    </div>
+
+    <!-- Authorized Staff Action: Report Snakebite Treatment -->
+    <div class="info-panel">
+      <div class="info-panel-title">Report Snakebite Treatment</div>
+      <form method="post" action="{% url 'dashboard:facility-detail' facility.id %}">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="report_case">
+
+        {% if not request.user.is_authenticated %}
+          <div class="form-group">
+            <label class="form-label" for="case-reporter-phone">Registered Reporter Phone:</label>
+            <input type="text" id="case-reporter-phone" name="reporter_phone" placeholder="+234803..." required class="form-control">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="case-staff-pin">4-Digit Staff PIN:</label>
+            <input type="password" id="case-staff-pin" name="staff_pin" maxlength="8" placeholder="Enter Staff PIN" required class="form-control">
+          </div>
+        {% endif %}
+
+        <div class="form-group">
+          <label class="form-label" for="vials-input">Vials Administered:</label>
+          <input type="number" id="vials-input" name="vials_used" min="1" max="20" value="1" required class="form-control">
+          <div class="form-help">Cannot exceed available usable stock ({{ facility.usable_stock }} vials)</div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="outcome-select">Patient Clinical Outcome:</label>
+          <select id="outcome-select" name="outcome" class="form-control">
+            <option value="RECOVERED">Recovered / Discharged</option>
+            <option value="UNDER_TREATMENT">Currently Under Treatment</option>
+            <option value="TRANSFERRED">Transferred to Higher Facility</option>
+            <option value="FATALITY">Fatality</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="case-notes">Clinical Notes (Anonymized):</label>
+          <input type="text" id="case-notes" name="notes" placeholder="e.g. Carpet viper envenomation" class="form-control">
+        </div>
+
+        <button type="submit" class="btn btn-secondary" style="width: 100%;">
+          Record Case &amp; Deduct Vials
+        </button>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="/static/js/map.js"></script>
+{% endblock %}
