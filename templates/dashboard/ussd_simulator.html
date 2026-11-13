@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 
-{% block title %}Interactive USSD Simulator (*384*20#) — VenomLink{% endblock %}
+{% block title %}Interactive USSD Simulator (*384*20#) — VENOMLINK (Prototype — USPF Changemaker Challenge 2026){% endblock %}
 
 {% block content %}
 <div class="page-header">
@@ -31,12 +31,12 @@
                 {{ rep.facility.name }} &bull; {{ rep.get_role_display }} ({{ rep.phone_number }})
               </option>
             {% empty %}
-              <option value="+2348030000001">Kaltungo General Hospital &bull; Pharmacist (+2348030000001)</option>
+              <option value="DEMO-STAFF-001">Demo Antivenom Hub Alpha &bull; Pharmacist (DEMO-STAFF-001)</option>
             {% endfor %}
           </optgroup>
-          <optgroup label="Public Citizen / Patient / Relative">
-            <option value="+2348091122334">Patient Relative &bull; Gombe (+2348091122334)</option>
-            <option value="+2348075544332">Community Health Worker &bull; Plateau (+2348075544332)</option>
+          <optgroup label="Simulated Public Caller">
+            <option value="DEMO-CALLER-01">Simulated Caller A &bull; Gombe (DEMO-CALLER-01)</option>
+            <option value="DEMO-CALLER-02">Simulated Caller B &bull; Plateau (DEMO-CALLER-02)</option>
           </optgroup>
         </select>
       </div>
@@ -97,9 +97,9 @@
         <div style="background-color: var(--color-surface-subtle); padding: 12px; border-radius: var(--radius-sm); border: 1px solid var(--color-border);">
           <strong style="color: var(--color-primary); font-size: 0.88rem;">1. Update Stock Flow (Feature 1)</strong>
           <ol style="margin-left: 18px; margin-top: 6px; font-size: 0.82rem; color: #546E7A; line-height: 1.5;">
-            <li>Select staff SIM (e.g. Kaltungo Pharmacist)</li>
+            <li>Select simulated staff SIM</li>
             <li>Dial <strong>1</strong> (Update antivenom stock)</li>
-            <li>Enter 4-digit Staff PIN (Demo: <strong>1234</strong>)</li>
+            <li>Enter the Staff PIN configured during demo setup</li>
             <li>Enter new vial count (e.g. <strong>6</strong>)</li>
             <li>Enter batch expiry (e.g. <strong>06/27</strong>)</li>
             <li>Confirmation returned &amp; DB updated</li>

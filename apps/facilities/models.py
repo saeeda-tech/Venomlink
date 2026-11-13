@@ -1,7 +1,7 @@
 """
 Facilities, Reporters, and Role-Based Access Control (RBAC) models for VenomLink.
-Represents verified public health facilities, primary health centres,
-general hospitals, authorized staff reporters, and system user profiles.
+Represents registered health facilities, treatment clinics,
+authorized staff reporters, and system user profiles.
 """
 
 from calendar import monthrange
@@ -51,7 +51,17 @@ class Facility(models.Model):
     lga = models.CharField(max_length=100, db_index=True, verbose_name="LGA")
     latitude = models.DecimalField(max_digits=9, decimal_places=6)
     longitude = models.DecimalField(max_digits=9, decimal_places=6)
-    phone = models.CharField(max_length=32, help_text="Public emergency contact number")
+    phone = models.CharField(
+        max_length=32,
+        null=True,
+        blank=True,
+        help_text="Emergency facility contact number (nullable for demo/simulated facilities)"
+    )
+    is_demo = models.BooleanField(
+        default=False,
+        db_index=True,
+        help_text="True for simulated demonstration facilities"
+    )
     verified = models.BooleanField(default=True, db_index=True)
     resupply_lead_time_days = models.PositiveIntegerField(
         default=3,
@@ -363,51 +373,37 @@ class Facility(models.Model):
         return self.get_consumption_metrics(days=30)['days_of_cover_display']
 
     @property
+    def phone_display(self) -> str:
+        if self.phone:
+            return self.phone
+        return "Demo contact unavailable" if self.is_demo else "Contact unavailable"
+
+    @property
+    def below_min_treatment_course(self) -> bool:
+        from apps.analytics.thresholds import classify_facility_stock
+        return classify_facility_stock(
+            usable_stock=self.usable_stock,
+            has_expired_stock=self.has_expired_stock,
+            is_stale=self.is_stale,
+            days_of_cover=self.days_of_cover,
+        )['below_min_treatment_course']
+
+    @property
     def stock_status(self) -> str:
         """
-        Semantic stock condition using independent configurable thresholds:
+        Single-source-of-truth stock status classification via `classify_facility_stock`:
         - 0 usable vials (or expired batch): STOCK_OUT
-        - 1–2 usable vials: CRITICAL (even when consumption history is insufficient)
-        - 3–4 usable vials: LOW_STOCK (or CRITICAL if high-confidence days_of_cover <= reorder_threshold)
-        - Above 4 usable vials:
-          - If data is stale (>48h): UNCONFIRMED
-          - Else evaluated via high-confidence days_of_cover against replenishment lead time + buffer
+        - days_of_cover <= CRITICAL_DAYS_OF_COVER_THRESHOLD (5.0d): CRITICAL
+        - CRITICAL < days_of_cover <= WARNING_DAYS_OF_COVER_THRESHOLD (7.0d): LOW_STOCK
+        - > 7.0d (or no consumption history): UNCONFIRMED if stale (>48h), else AVAILABLE
         """
-        cfg = getattr(settings, 'VENOMLINK_CONFIG', {})
-        stock_out_threshold = cfg.get('STOCK_OUT_THRESHOLD', 0)
-        crit_max_vials = cfg.get('CRITICAL_STOCK_MAX_VIALS', 2)
-        low_max_vials = cfg.get('LOW_STOCK_MAX_VIALS', 4)
-
-        if self.has_expired_stock:
-            return 'STOCK_OUT'
-
-        usable = self.usable_stock
-        if usable <= stock_out_threshold:
-            return 'STOCK_OUT'
-
-        if usable <= crit_max_vials:
-            return 'CRITICAL'
-
-        reorder_threshold = self.resupply_lead_time_days + self.safety_buffer_days
-        doc = self.days_of_cover
-        confidence = self.consumption_confidence
-
-        if usable <= low_max_vials:
-            if confidence == 'HIGH_CONFIDENCE' and doc is not None and doc <= reorder_threshold:
-                return 'CRITICAL'
-            return 'LOW_STOCK'
-
-        # Above 4 vials: check freshness first, then high-confidence days of cover
-        if self.is_stale:
-            return 'UNCONFIRMED'
-
-        if confidence == 'HIGH_CONFIDENCE' and doc is not None:
-            if doc <= reorder_threshold:
-                return 'CRITICAL'
-            elif doc <= (reorder_threshold + 3):
-                return 'LOW_STOCK'
-
-        return 'AVAILABLE'
+        from apps.analytics.thresholds import classify_facility_stock
+        return classify_facility_stock(
+            usable_stock=self.usable_stock,
+            has_expired_stock=self.has_expired_stock,
+            is_stale=self.is_stale,
+            days_of_cover=self.days_of_cover,
+        )['stock_status']
 
     @property
     def stock_status_label(self) -> str:

@@ -7,16 +7,19 @@ from .serializers import AlertSerializer
 from .alert_engine import find_redistribution_recommendations, evaluate_all_alerts
 from apps.facilities.models import UserRole
 from apps.facilities.permissions import (
+    DemoModeOrOperationalRole,
+    DemoModeOrStateOrSystemOfficial,
     IsAuthorizedForAlertManagement,
     get_user_role,
     get_user_assigned_state,
     get_user_facility_id,
+    is_demo_mode,
 )
 
 
 class AlertListAPIView(generics.ListAPIView):
     serializer_class = AlertSerializer
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [DemoModeOrOperationalRole]
 
     def get_queryset(self):
         status_param = self.request.query_params.get('status')
@@ -32,7 +35,7 @@ class AlertListAPIView(generics.ListAPIView):
         severity = self.request.query_params.get('severity')
         alert_type = self.request.query_params.get('alert_type')
 
-        # Enforce state-level isolation for STATE_OFFICIAL
+        # Enforce strict fail-closed isolation by role
         if role == UserRole.STATE_OFFICIAL:
             assigned_state = get_user_assigned_state(self.request.user)
             if not assigned_state:
@@ -40,6 +43,13 @@ class AlertListAPIView(generics.ListAPIView):
             if state and state.strip().lower() != assigned_state.lower():
                 return queryset.none()
             queryset = queryset.filter(facility__state__iexact=assigned_state)
+        elif role in (UserRole.FACILITY_ADMIN, UserRole.FACILITY_REPORTER):
+            fac_id = get_user_facility_id(self.request.user)
+            if not fac_id:
+                return queryset.none()
+            queryset = queryset.filter(facility_id=fac_id)
+        elif role == UserRole.PUBLIC_USER and not is_demo_mode():
+            return queryset.none()
         elif state:
             queryset = queryset.filter(facility__state__iexact=state)
 
@@ -98,20 +108,26 @@ class AlertResolveAPIView(views.APIView):
 
 
 class RedistributionSuggestionsAPIView(views.APIView):
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [DemoModeOrStateOrSystemOfficial]
 
     def get(self, request):
         state = request.query_params.get('state')
         role = get_user_role(request.user)
         if role == UserRole.STATE_OFFICIAL:
             assigned_state = get_user_assigned_state(request.user)
-            if state and assigned_state and state.strip().lower() != assigned_state.lower():
+            if not assigned_state:
+                return Response({
+                    'state': state or '',
+                    'total_recommendations': 0,
+                    'recommendations': []
+                })
+            if state and state.strip().lower() != assigned_state.lower():
                 return Response({
                     'state': state,
                     'total_recommendations': 0,
                     'recommendations': []
                 })
-            state = assigned_state or state
+            state = assigned_state
 
         recommendations = find_redistribution_recommendations(state=state)
         return Response({

@@ -9,6 +9,7 @@ from apps.facilities.models import Facility
 class AlertType(models.TextChoices):
     POTENTIAL_STOCKOUT = 'POTENTIAL_STOCKOUT', 'Potential Stock-Out'
     LOW_STOCK = 'LOW_STOCK', 'Low Stock'
+    LOW_TREATMENT_READINESS = 'LOW_TREATMENT_READINESS', 'Below Treatment Course Assumption'
     STALE_DATA = 'STALE_DATA', 'Stale Stock Data'
     EXPIRY_RISK = 'EXPIRY_RISK', 'Batch Expiry Risk'
 

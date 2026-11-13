@@ -1,7 +1,7 @@
 from django.urls import path
 from .views import (
     overview_view, alerts_view, facilities_view, facility_detail_view,
-    redistribution_view, ussd_simulator_view, demo_runner_view
+    redistribution_view, ussd_simulator_view, demo_runner_view, demo_runner_action_view
 )
 
 app_name = 'dashboard'
@@ -14,5 +14,6 @@ urlpatterns = [
     path('redistribution/', redistribution_view, name='redistribution'),
     path('ussd-simulator/', ussd_simulator_view, name='ussd-simulator'),
     path('demo-flow/', demo_runner_view, name='demo-runner'),
+    path('demo-flow/action/', demo_runner_action_view, name='demo-runner-action'),
 ]
 

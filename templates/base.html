@@ -1,30 +1,40 @@
 <!DOCTYPE html>
 <html lang="en-GB">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="referrer" content="strict-origin-when-cross-origin">
   <meta name="csrf-token" content="{{ csrf_token }}">
-  <title>{% block title %}VenomLink — Antivenom Availability and Stock Intelligence{% endblock %}</title>
-  
+  <title>{% block title %}VENOMLINK — Prototype (USPF Changemaker Challenge 2026){% endblock %}</title>
+
   <!-- System / Leaflet CSS (Local with CDN fallback) -->
   <link rel="stylesheet" href="/static/vendor/leaflet/leaflet.css">
   <link rel="stylesheet" href="/static/css/venomlink.css">
-  
+
   {% block extra_head %}{% endblock %}
 </head>
+
 <body>
 
-  <!-- Federal Public Health Infrastructure Banner -->
-  <aside class="gov-banner" aria-label="Official Public Health System Identification">
+  <!-- Prototype Identification Banner -->
+  <aside class="gov-banner" aria-label="Prototype Identification">
     <div class="gov-banner-flag">
-      <span class="flag-box" aria-hidden="true"></span>
-      <span>Federal Ministry of Health &bull; National Snakebite Research and Intervention Programme</span>
+      <span><strong>VENOMLINK</strong> &bull; Prototype &mdash; USPF Changemaker Challenge 2026</span>
     </div>
-    <div>
-      Emergency Logistics Monitoring Network
+    <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+      <span>Antivenom Logistics &amp; Stock Intelligence Prototype</span>
       {% if request.user.is_authenticated %}
-        &bull; Signed in: <strong>{{ request.user.username }}</strong> ({{ user_role }})
+      <span>&bull; Signed in: <strong>{{ request.user.username }}</strong> ({{ user_role }})</span>
+      <a href="{% url 'password_change' %}" style="color: #E8F3F0; text-decoration: underline;">Change Password</a>
+      <form method="post" action="{% url 'logout' %}" style="display: inline;">
+        {% csrf_token %}
+        <button type="submit"
+          style="background: none; border: none; color: #FFE082; cursor: pointer; text-decoration: underline; font-size: inherit;">Sign
+          Out</button>
+      </form>
+      {% else %}
+      <a href="{% url 'login' %}" style="color: #E8F3F0; text-decoration: underline;">Staff Sign In</a>
       {% endif %}
     </div>
   </aside>
@@ -33,7 +43,8 @@
   <header class="app-header">
     <div class="header-container">
       <div class="brand-section">
-        <a href="{% url 'dashboard:overview' %}?state={{ selected_state }}&amp;period={{ selected_period }}" class="brand-title">
+        <a href="{% url 'dashboard:overview' %}?state={{ selected_state }}&amp;period={{ selected_period }}"
+          class="brand-title">
           <span class="brand-dot" aria-hidden="true"></span>
           VenomLink
         </a>
@@ -41,18 +52,25 @@
       </div>
 
       <nav class="main-nav" aria-label="Main Navigation">
-        <a href="{% url 'dashboard:overview' %}?state={{ selected_state }}&amp;period={{ selected_period }}" class="nav-link {% if request.resolver_match.url_name == 'overview' %}active{% endif %}">Overview</a>
-        <a href="{% url 'dashboard:alerts' %}?state={{ selected_state }}&amp;period={{ selected_period }}" class="nav-link {% if request.resolver_match.url_name == 'alerts' %}active{% endif %}">
+        <a href="{% url 'dashboard:overview' %}?state={{ selected_state }}&amp;period={{ selected_period }}"
+          class="nav-link {% if request.resolver_match.url_name == 'overview' %}active{% endif %}">Overview</a>
+        <a href="{% url 'dashboard:alerts' %}?state={{ selected_state }}&amp;period={{ selected_period }}"
+          class="nav-link {% if request.resolver_match.url_name == 'alerts' %}active{% endif %}">
           Alerts
           {% if global_active_alerts_count > 0 %}
-            <span class="badge-alert-count">{{ global_active_alerts_count }}</span>
+          <span class="badge-alert-count">{{ global_active_alerts_count }}</span>
           {% endif %}
         </a>
-        <a href="{% url 'dashboard:facilities' %}?state={{ selected_state }}&amp;period={{ selected_period }}" class="nav-link {% if 'facilit' in request.resolver_match.url_name %}active{% endif %}">Facilities</a>
-        <a href="{% url 'dashboard:redistribution' %}?state={{ selected_state }}&amp;period={{ selected_period }}" class="nav-link {% if request.resolver_match.url_name == 'redistribution' %}active{% endif %}">Redistribution</a>
+        <a href="{% url 'dashboard:facilities' %}?state={{ selected_state }}&amp;period={{ selected_period }}"
+          class="nav-link {% if 'facilit' in request.resolver_match.url_name %}active{% endif %}">Facilities</a>
+        <a href="{% url 'dashboard:redistribution' %}?state={{ selected_state }}&amp;period={{ selected_period }}"
+          class="nav-link {% if request.resolver_match.url_name == 'redistribution' %}active{% endif %}">Redistribution</a>
         {% if demo_mode %}
-        <a href="{% url 'dashboard:ussd-simulator' %}" class="nav-link {% if request.resolver_match.url_name == 'ussd-simulator' %}active{% endif %}">USSD Simulator</a>
-        <a href="{% url 'dashboard:demo-runner' %}" class="nav-link {% if request.resolver_match.url_name == 'demo-runner' %}active{% endif %}">90s Demo</a>
+        <a href="{% url 'dashboard:ussd-simulator' %}"
+          class="nav-link {% if request.resolver_match.url_name == 'ussd-simulator' %}active{% endif %}">USSD
+          Simulator</a>
+        <a href="{% url 'dashboard:demo-runner' %}"
+          class="nav-link {% if request.resolver_match.url_name == 'demo-runner' %}active{% endif %}">90s Demo</a>
         {% endif %}
       </nav>
     </div>
@@ -66,10 +84,10 @@
           <label for="global-state-select">State:</label>
           <select id="global-state-select" class="control-select" {% if user_assigned_state %}disabled title="Locked to assigned state"{% endif %}>
             {% if not user_assigned_state %}
-              <option value="" {% if not selected_state %}selected{% endif %}>All Operational States</option>
+            <option value="" {% if not selected_state %}selected{% endif %}>All Operational States</option>
             {% endif %}
             {% for st in global_states %}
-              <option value="{{ st }}" {% if selected_state|lower == st|lower %}selected{% endif %}>{{ st }}</option>
+            <option value="{{ st }}" {% if selected_state|lower == st|lower %}selected{% endif %}>{{ st }}</option>
             {% endfor %}
           </select>
         </div>
@@ -101,13 +119,13 @@
 
   <!-- Flash Messages -->
   {% if messages %}
-    <div class="flash-messages">
-      {% for message in messages %}
-        <div class="flash-alert {% if message.tags %}{{ message.tags }}{% endif %}">
-          {{ message }}
-        </div>
-      {% endfor %}
+  <div class="flash-messages">
+    {% for message in messages %}
+    <div class="flash-alert {% if message.tags %}{{ message.tags }}{% endif %}">
+      {{ message }}
     </div>
+    {% endfor %}
+  </div>
   {% endif %}
 
   <!-- Main Content Body -->
@@ -115,17 +133,17 @@
     {% block content %}{% endblock %}
   </main>
 
-  <!-- Restrained Government Public Health Footer -->
+  <!-- Prototype Footer -->
   <footer class="app-footer">
     <div class="footer-container">
       <div>
-        <strong>VenomLink</strong> &mdash; Find antivenom. Reduce delays. Prevent stock-outs.
+        <strong>VENOMLINK</strong> &mdash; Prototype &mdash; USPF Changemaker Challenge 2026
         <div style="font-size: 0.76rem; color: #78909C; margin-top: 4px;">
-          Designed for State Health Authorities, Primary Healthcare Boards, and Emergency Clinical Staff in Nigeria.
+          Antivenom Availability and Stock Intelligence Prototype. Find antivenom. Reduce delays. Prevent stock-outs.
         </div>
       </div>
       <div>
-        <span>USSD Dial Code: <strong>*384*20#</strong></span> &bull; 
+        <span>USSD Dial Code: <strong>*384*20#</strong></span> &bull;
         <span>Gateway: Africa's Talking / SMPP</span>
       </div>
     </div>
@@ -137,4 +155,5 @@
   {% block extra_scripts %}{% endblock %}
 
 </body>
+
 </html>

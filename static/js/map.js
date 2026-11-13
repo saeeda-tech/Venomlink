@@ -142,11 +142,11 @@ function renderFacilityMarkers(map, facilities) {
     bounds.extend(latLng);
 
     // Semantic marker colour
-    let bgColor = '#1E7E34'; // Green: Available & confirmed
-    if (fac.status === 'CRITICAL') {
-      bgColor = '#B71C1C';   // Red: Critical / Stock-out
-    } else if (fac.status === 'LOW') {
-      bgColor = '#D97706';   // Amber: Low stock
+    let bgColor = '#1E7E34'; // Green: Normal (> 7d cover)
+    if (fac.status === 'CRITICAL' || fac.status === 'STOCK_OUT') {
+      bgColor = '#B71C1C';   // Red: Critical / Stock-out (<= 5d or 0 vials)
+    } else if (fac.status === 'LOW' || fac.status === 'LOW_STOCK') {
+      bgColor = '#D97706';   // Amber: Low stock (> 5d - 7d)
     } else if (fac.status === 'UNCONFIRMED' || fac.freshness_status === 'STALE') {
       bgColor = '#546E7A';   // Grey: Unconfirmed / Stale
     }
@@ -205,11 +205,11 @@ function renderFacilityMarkers(map, facilities) {
         </div>
         <div class="popup-row">
           <span class="popup-label">Days of Cover:</span>
-          <span class="popup-value">${fac.days_of_cover} days</span>
+          <span class="popup-value">${fac.days_of_cover !== null && fac.days_of_cover !== undefined ? `${fac.days_of_cover} days` : escapeHtml(fac.days_of_cover_display || 'Unavailable')}</span>
         </div>
         <div class="popup-row">
           <span class="popup-label">Phone:</span>
-          <span class="popup-value"><a href="tel:${escapeHtml(fac.phone)}" style="color: #0B5D4B; text-decoration: none; font-weight: 600;">${escapeHtml(fac.phone)}</a></span>
+          <span class="popup-value">${fac.phone ? `<a href="tel:${escapeHtml(fac.phone)}" style="color: #0B5D4B; text-decoration: none; font-weight: 600;">${escapeHtml(fac.phone)}</a>` : `<span style="color: #546E7A;">${escapeHtml(fac.phone_display || 'Demo contact unavailable')}</span>`}</span>
         </div>
         <a href="/facilities/${fac.id}/" class="popup-action-btn">View Facility Dashboard</a>
       </div>

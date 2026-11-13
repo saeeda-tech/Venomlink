@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 
-{% block title %}Operational Alerts — VenomLink{% endblock %}
+{% block title %}Operational Alerts — VENOMLINK (Prototype — USPF Changemaker Challenge 2026){% endblock %}
 
 {% block content %}
 <div class="page-header">
@@ -59,7 +59,8 @@
     </div>
 
     {% if severity_filter or type_filter or status_filter == 'RESOLVED' %}
-    <a href="{% url 'dashboard:alerts' %}?state={{ state_filter }}&amp;period={{ selected_period }}" class="btn btn-secondary btn-sm">Clear Filters</a>
+    <a href="{% url 'dashboard:alerts' %}?state={{ state_filter }}&amp;period={{ selected_period }}"
+      class="btn btn-secondary btn-sm">Clear Filters</a>
     {% endif %}
   </form>
 
@@ -83,9 +84,9 @@
               {{ alert.get_severity_display }}
             </span>
             {% if alert.status == 'ACKNOWLEDGED' %}
-              <div style="font-size: 0.72rem; color: #0B5D4B; font-weight: 600; margin-top: 3px;">Acknowledged</div>
+            <div style="font-size: 0.72rem; color: #0B5D4B; font-weight: 600; margin-top: 3px;">Acknowledged</div>
             {% elif alert.status == 'RESOLVED' %}
-              <div style="font-size: 0.72rem; color: #546E7A; font-weight: 600; margin-top: 3px;">Resolved</div>
+            <div style="font-size: 0.72rem; color: #546E7A; font-weight: 600; margin-top: 3px;">Resolved</div>
             {% endif %}
           </td>
           <td>
@@ -102,9 +103,9 @@
             <div><strong>{{ alert.current_stock }} vials</strong> remaining</div>
             <div style="font-size: 0.78rem; color: #546E7A;">
               {% if alert.days_of_cover is not None %}
-                {{ alert.days_of_cover }} days of cover
+              {{ alert.days_of_cover }} days of cover
               {% else %}
-                Insufficient usage history
+              Insufficient usage history
               {% endif %}
             </div>
           </td>
@@ -115,20 +116,22 @@
             <div style="display: flex; gap: 6px; justify-content: center; flex-wrap: wrap;">
               <a href="{% url 'dashboard:facility-detail' alert.facility.id %}" class="btn-action-view">View</a>
               {% if request.user.is_authenticated and alert.status != 'RESOLVED' %}
-                {% if alert.status == 'ACTIVE' %}
-                  <form method="post" style="display: inline;">
-                    {% csrf_token %}
-                    <input type="hidden" name="alert_id" value="{{ alert.id }}">
-                    <input type="hidden" name="action" value="acknowledge">
-                    <button type="submit" class="btn-action-view" style="cursor: pointer; background: #FFF; border: 1px solid #B0BEC5;">Ack</button>
-                  </form>
-                {% endif %}
-                <form method="post" style="display: inline;">
-                  {% csrf_token %}
-                  <input type="hidden" name="alert_id" value="{{ alert.id }}">
-                  <input type="hidden" name="action" value="resolve">
-                  <button type="submit" class="btn-action-view" style="cursor: pointer; background: #E8F3F0; border: 1px solid #0B5D4B; color: #0B5D4B;">Resolve</button>
-                </form>
+              {% if alert.status == 'ACTIVE' %}
+              <form method="post" style="display: inline;">
+                {% csrf_token %}
+                <input type="hidden" name="alert_id" value="{{ alert.id }}">
+                <input type="hidden" name="action" value="acknowledge">
+                <button type="submit" class="btn-action-view"
+                  style="cursor: pointer; background: #FFF; border: 1px solid #B0BEC5;">Ack</button>
+              </form>
+              {% endif %}
+              <form method="post" style="display: inline;">
+                {% csrf_token %}
+                <input type="hidden" name="alert_id" value="{{ alert.id }}">
+                <input type="hidden" name="action" value="resolve">
+                <button type="submit" class="btn-action-view"
+                  style="cursor: pointer; background: #E8F3F0; border: 1px solid #0B5D4B; color: #0B5D4B;">Resolve</button>
+              </form>
               {% endif %}
             </div>
           </td>

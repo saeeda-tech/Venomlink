@@ -110,10 +110,10 @@ python manage.py migrate
 # 1. Apply migrations
 python manage.py migrate
 
-# 2. Load realistic Nigerian demo data (11 facilities, cases, alerts)
+# 2. Load clearly labelled simulated demonstration facilities (no hardcoded passwords)
 python seed_demo_data.py
 
-# 3. Create admin account
+# 3. Create admin account securely
 python manage.py createsuperuser
 
 # 4. Collect static files (for production / WhiteNoise)
@@ -124,8 +124,8 @@ python manage.py runserver 0.0.0.0:8000
 ```
 
 Access:
-- **Dashboard:** http://localhost:8000/
-- **Admin:** http://localhost:8000/admin/ (username: admin, password from createsuperuser)
+- **Dashboard:** http://localhost:8000/ (requires login when `DEMO_MODE=False`; demo-preview enabled when `DEMO_MODE=True`)
+- **Admin:** http://localhost:8000/admin/ (credentials created via `createsuperuser` or environment setup)
 - **USSD Simulator:** http://localhost:8000/ussd-simulator/
 - **90s Demo:** http://localhost:8000/demo-flow/
 

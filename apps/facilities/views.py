@@ -5,10 +5,12 @@ from django.db.models import Count
 from .models import Facility, Reporter, UserRole
 from .serializers import FacilitySerializer, ReporterSerializer
 from .permissions import (
+    DemoModeOrOperationalRole,
     IsSystemOrStateAdminOrReadOnly,
     get_user_role,
     get_user_assigned_state,
     get_user_facility_id,
+    is_demo_mode,
 )
 from .throttling import AnonSearchRateThrottle
 
@@ -23,7 +25,7 @@ def _can_see_unverified(user) -> bool:
 
 class FacilityListAPIView(generics.ListCreateAPIView):
     serializer_class = FacilitySerializer
-    permission_classes = [IsSystemOrStateAdminOrReadOnly]
+    permission_classes = [IsSystemOrStateAdminOrReadOnly, DemoModeOrOperationalRole]
     throttle_classes = [AnonSearchRateThrottle]
 
     def get_queryset(self):
@@ -33,12 +35,18 @@ class FacilityListAPIView(generics.ListCreateAPIView):
         role = get_user_role(self.request.user)
         assigned_state = get_user_assigned_state(self.request.user)
 
-        # Enforce state-level data isolation for STATE_OFFICIAL
-        if role == UserRole.STATE_OFFICIAL and assigned_state:
+        if role == UserRole.STATE_OFFICIAL:
+            if not assigned_state:
+                return []
             requested_state = self.request.query_params.get('state')
             if requested_state and requested_state.strip().lower() != assigned_state.lower():
                 raise PermissionDenied(f"State official access is restricted to {assigned_state} State.")
             queryset = queryset.filter(state__iexact=assigned_state)
+        elif role in (UserRole.FACILITY_ADMIN, UserRole.FACILITY_REPORTER):
+            fac_id = get_user_facility_id(self.request.user)
+            if not fac_id:
+                return []
+            queryset = queryset.filter(pk=fac_id)
         else:
             state = self.request.query_params.get('state')
             if state:
@@ -51,7 +59,13 @@ class FacilityListAPIView(generics.ListCreateAPIView):
 
         facilities = list(queryset)
         if status_filter:
-            facilities = [f for f in facilities if f.stock_status.lower() == status_filter.lower()]
+            sf = status_filter.strip().upper()
+            if sf in ('LOW', 'LOW_STOCK'):
+                facilities = [f for f in facilities if f.stock_status in ('LOW', 'LOW_STOCK')]
+            elif sf in ('CRITICAL', 'STOCK_OUT'):
+                facilities = [f for f in facilities if f.stock_status in ('CRITICAL', 'STOCK_OUT')]
+            else:
+                facilities = [f for f in facilities if f.stock_status.upper() == sf]
         return facilities
 
     def perform_create(self, serializer):
@@ -68,13 +82,24 @@ class FacilityListAPIView(generics.ListCreateAPIView):
 
 class FacilityDetailAPIView(generics.RetrieveUpdateAPIView):
     serializer_class = FacilitySerializer
-    permission_classes = [IsSystemOrStateAdminOrReadOnly]
+    permission_classes = [IsSystemOrStateAdminOrReadOnly, DemoModeOrOperationalRole]
     throttle_classes = [AnonSearchRateThrottle]
 
     def get_queryset(self):
         queryset = Facility.objects.all().prefetch_related('inventory_transactions', 'cases')
         if not _can_see_unverified(self.request.user):
             queryset = queryset.filter(verified=True)
+        role = get_user_role(self.request.user)
+        if role == UserRole.STATE_OFFICIAL:
+            assigned_state = get_user_assigned_state(self.request.user)
+            if not assigned_state:
+                return queryset.none()
+            queryset = queryset.filter(state__iexact=assigned_state)
+        elif role in (UserRole.FACILITY_ADMIN, UserRole.FACILITY_REPORTER):
+            fac_id = get_user_facility_id(self.request.user)
+            if not fac_id:
+                return queryset.none()
+            queryset = queryset.filter(pk=fac_id)
         return queryset
 
     def perform_update(self, serializer):
@@ -90,13 +115,15 @@ class FacilityDetailAPIView(generics.RetrieveUpdateAPIView):
 
 
 class StateListAPIView(views.APIView):
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [DemoModeOrOperationalRole]
 
     def get(self, request):
         queryset = Facility.objects.all()
         role = get_user_role(request.user)
         assigned_state = get_user_assigned_state(request.user)
-        if role == UserRole.STATE_OFFICIAL and assigned_state:
+        if role == UserRole.STATE_OFFICIAL:
+            if not assigned_state:
+                return Response([])
             queryset = queryset.filter(state__iexact=assigned_state)
         states = (
             queryset.values('state')
@@ -107,14 +134,16 @@ class StateListAPIView(views.APIView):
 
 
 class LgaListAPIView(views.APIView):
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [DemoModeOrOperationalRole]
 
     def get(self, request):
         state = request.query_params.get('state')
         queryset = Facility.objects.all()
         role = get_user_role(request.user)
         assigned_state = get_user_assigned_state(request.user)
-        if role == UserRole.STATE_OFFICIAL and assigned_state:
+        if role == UserRole.STATE_OFFICIAL:
+            if not assigned_state:
+                return Response([])
             queryset = queryset.filter(state__iexact=assigned_state)
         elif state:
             queryset = queryset.filter(state__iexact=state)

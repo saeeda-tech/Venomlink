@@ -306,24 +306,28 @@ LOGGING = {
     },
 }
 
+LOGIN_URL = '/accounts/login/'
+LOGIN_REDIRECT_URL = '/'
+LOGOUT_REDIRECT_URL = '/accounts/login/'
+
 # VenomLink Operational Parameters (Configurable via Environment)
 VENOMLINK_CONFIG = {
     'STOCK_OUT_THRESHOLD': int(os.getenv('STOCK_OUT_THRESHOLD', 0)),
-    'CRITICAL_STOCK_MAX_VIALS': int(os.getenv('CRITICAL_STOCK_MAX_VIALS', 2)),
-    'LOW_STOCK_MAX_VIALS': int(os.getenv('LOW_STOCK_MAX_VIALS', 4)),
+    'CRITICAL_DAYS_OF_COVER_THRESHOLD': float(os.getenv('CRITICAL_DAYS_OF_COVER_THRESHOLD', 5.0)),
+    'WARNING_DAYS_OF_COVER_THRESHOLD': float(os.getenv('WARNING_DAYS_OF_COVER_THRESHOLD', 7.0)),
+    # Operational planning assumption for minimum single-course antivenom reserve; requires clinical validation.
+    'MIN_TREATMENT_COURSE_VIALS': int(os.getenv('MIN_TREATMENT_COURSE_VIALS', 5)),
     'RESUPPLY_LEAD_TIME_DAYS': int(os.getenv('DEFAULT_RESUPPLY_LEAD_TIME_DAYS', 3)),
     'SAFETY_BUFFER_DAYS': int(os.getenv('DEFAULT_SAFETY_BUFFER_DAYS', 2)),
     'STALE_DATA_THRESHOLD_HOURS': int(os.getenv('STALE_DATA_THRESHOLD_HOURS', 48)),
     'EXPIRY_WARNING_DAYS': int(os.getenv('EXPIRY_WARNING_DAYS', 60)),
     'MIN_CONSUMPTION_EVENTS_HIGH_CONFIDENCE': int(os.getenv('MIN_CONSUMPTION_EVENTS_HIGH_CONFIDENCE', 3)),
     'MIN_OBSERVATION_DAYS_HIGH_CONFIDENCE': int(os.getenv('MIN_OBSERVATION_DAYS_HIGH_CONFIDENCE', 7)),
-    'CRITICAL_DAYS_OF_COVER_THRESHOLD': 4.0,
-    'WARNING_DAYS_OF_COVER_THRESHOLD': 7.0,
     'USSD_SESSION_TIMEOUT_SECONDS': int(os.getenv('USSD_SESSION_TIMEOUT_SECONDS', 180)),
     'USSD_MAX_PIN_ATTEMPTS': int(os.getenv('USSD_MAX_PIN_ATTEMPTS', 3)),
     'USSD_LOCKOUT_MINUTES': int(os.getenv('USSD_LOCKOUT_MINUTES', 15)),
     'USSD_GATEWAY_TOKEN': os.getenv('USSD_GATEWAY_TOKEN', ''),
-    # Demo mode exposes the USSD simulator, the 90s demo runner (with demo credentials)
+    # Demo mode exposes the USSD simulator, the 90s demo runner, public official-dashboard preview,
     # and the demo notice banner. MUST be False for a pilot / production deployment.
     'SYSTEM_DEMO_MODE': _env_bool('DEMO_MODE', DEBUG),
 }

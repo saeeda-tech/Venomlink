@@ -1249,15 +1249,16 @@ class InventoryExpiryAndAlertVerificationTest(TestCase):
         self.assertEqual(fac.days_of_cover, 12.0)
 
     def test_alert_critical_at_1_to_2_vials_without_history_and_deduplication(self):
-        """Verifies 1-2 vials triggers CRITICAL alert without history and never duplicates."""
+        """Verifies 1-2 vials triggers CRITICAL low-treatment-readiness alert without history and never duplicates."""
         fac2, _ = make_facility(name='Two Vial No History', stock=2, expiry='06/27')
         evaluate_facility_alerts(fac2)
         evaluate_facility_alerts(fac2)
         alerts = Alert.objects.filter(
-            facility=fac2, alert_type=AlertType.POTENTIAL_STOCKOUT, status=AlertStatus.ACTIVE
+            facility=fac2, alert_type=AlertType.LOW_TREATMENT_READINESS, status=AlertStatus.ACTIVE
         )
         self.assertEqual(alerts.count(), 1)
         self.assertEqual(alerts.first().severity, AlertSeverity.CRITICAL)
+        self.assertEqual(fac2.stock_status, 'AVAILABLE')
 
     def test_deterministic_ordering_identical_timestamps(self):
         """Verifies ['-timestamp', '-id'] ordering when timestamps match."""
@@ -1459,3 +1460,325 @@ class Phase3HardeningAndReadinessTest(TestCase):
             body = r_404.content.decode()
             self.assertNotIn('Traceback', body)
             self.assertNotIn('settings.py', body)
+
+
+class UrgentPreDemoRemediationTests(TestCase):
+    """Regression verification for Urgent Pre-Demo Security, Data Integrity & Credibility Remediation."""
+
+    def setUp(self):
+        cache.clear()
+        self.client = Client()
+        self.fac, self.reporter = make_facility(
+            name='Demo Antivenom Hub Alpha',
+            state='Gombe',
+            lga='Kaltungo',
+            stock=10,
+            age_hours=2,
+            expiry='06/27',
+        )
+        self.fac.phone = None
+        self.fac.is_demo = True
+        self.fac.save(update_fields=['phone', 'is_demo'])
+
+        self.other_fac, _ = make_facility(
+            name='Demo Antivenom Hub Beta',
+            state='Plateau',
+            lga='Jos North',
+            stock=12,
+            age_hours=2,
+            expiry='06/27',
+        )
+        self.other_fac.phone = None
+        self.other_fac.is_demo = True
+        self.other_fac.save(update_fields=['phone', 'is_demo'])
+
+        self.non_demo_fac, _ = make_facility(
+            name='Pilot Field Site Alpha',
+            state='Gombe',
+            lga='Billiri',
+            stock=8,
+            age_hours=2,
+            expiry='06/27',
+        )
+        self.non_demo_fac.is_demo = False
+        self.non_demo_fac.phone = None
+        self.non_demo_fac.save(update_fields=['is_demo', 'phone'])
+
+    def test_task1_unauthorised_government_branding_removed(self):
+        from django.conf import settings
+        with override_settings(VENOMLINK_CONFIG={**settings.VENOMLINK_CONFIG, 'SYSTEM_DEMO_MODE': True}):
+            for path in ('/', '/accounts/login/', '/facilities/', '/alerts/'):
+                resp = self.client.get(path)
+                self.assertEqual(resp.status_code, 200)
+                html = resp.content.decode('utf-8')
+                self.assertIn('VENOMLINK', html)
+                self.assertIn('Prototype — USPF Changemaker Challenge 2026', html)
+                self.assertNotIn('Federal Ministry of Health', html)
+                self.assertNotIn('National Snakebite Research', html)
+                self.assertNotIn('Ministry Dashboard', html)
+
+    def test_task2_no_hardcoded_credentials_and_production_startup_guard(self):
+        from pathlib import Path
+        from django.conf import settings
+        from django.core.management import call_command
+        from apps.facilities.security_checks import collect_production_security_errors
+
+        base_dir = Path(__file__).resolve().parent.parent
+        forbidden_tokens = [
+            'VenomLink' + 'Admin2026!',
+            'GombeState' + '2026!',
+            'PlateauState' + '2026!',
+            'KaltungoAdmin' + '2026!',
+            'KaltungoStaff' + '2026!',
+        ]
+        for rel in (
+            'seed_demo_data.py',
+            'templates/dashboard/demo_runner.html',
+            'templates/dashboard/ussd_simulator.html',
+        ):
+            content = (base_dir / rel).read_text(encoding='utf-8')
+            for token in forbidden_tokens:
+                self.assertNotIn(token, content)
+
+        seed_src = (base_dir / 'seed_demo_data.py').read_text(encoding='utf-8')
+        self.assertNotIn("pin='1234'", seed_src)
+        self.assertNotIn("set_pin('1234')", seed_src)
+
+        legacy_admin = make_user_with_role(
+            'admin',
+            UserRole.SYSTEM_ADMIN,
+            password='StrongUniqueTestPassword!99',
+        )
+        legacy_admin.email = 'admin@venomlink.gov.ng'
+        legacy_admin.save(update_fields=['email'])
+
+        prod_cfg = {**settings.VENOMLINK_CONFIG, 'SYSTEM_DEMO_MODE': False}
+        with override_settings(DEBUG=False, VENOMLINK_CONFIG=prod_cfg):
+            errors = collect_production_security_errors()
+            self.assertTrue(any('legacy' in err.msg.lower() for err in errors))
+
+        call_command('harden_demo_credentials')
+        legacy_admin.refresh_from_db()
+        self.assertFalse(legacy_admin.is_active)
+        self.assertEqual(legacy_admin.email, '')
+
+        with override_settings(DEBUG=False, VENOMLINK_CONFIG=prod_cfg):
+            errors_after = collect_production_security_errors()
+            self.assertEqual(errors_after, [])
+
+    def test_task2_password_change_invalidates_other_sessions(self):
+        from django.conf import settings
+        user = make_user_with_role(
+            'gombe_session_user',
+            UserRole.STATE_OFFICIAL,
+            assigned_state='Gombe',
+            password='OldStrongPassword!23',
+        )
+        client_a = Client()
+        client_b = Client()
+        self.assertTrue(client_a.login(username='gombe_session_user', password='OldStrongPassword!23'))
+        self.assertTrue(client_b.login(username='gombe_session_user', password='OldStrongPassword!23'))
+
+        resp = client_a.post(
+            '/accounts/password_change/',
+            {
+                'old_password': 'OldStrongPassword!23',
+                'new_password1': 'NewStrongPassword!456',
+                'new_password2': 'NewStrongPassword!456',
+            },
+        )
+        self.assertEqual(resp.status_code, 302)
+
+        non_demo_cfg = {**settings.VENOMLINK_CONFIG, 'SYSTEM_DEMO_MODE': False}
+        with override_settings(VENOMLINK_CONFIG=non_demo_cfg):
+            # Session A kept alive via update_session_auth_hash
+            self.assertEqual(client_a.get('/facilities/').status_code, 200)
+            # Session B invalidated because session auth hash no longer matches
+            resp_b = client_b.get('/facilities/')
+            self.assertEqual(resp_b.status_code, 302)
+            self.assertIn('/accounts/login/', resp_b['Location'])
+
+    def test_task3_fictional_facilities_and_nullable_phone_safety(self):
+        from pathlib import Path
+        from django.conf import settings
+
+        base_dir = Path(__file__).resolve().parent.parent
+        seed_src = (base_dir / 'seed_demo_data.py').read_text(encoding='utf-8')
+        for real_name in (
+            'Kaltungo General Hospital',
+            'Gombe State Specialist Hospital',
+            'Zaria General Hospital',
+            'Bambam Primary Healthcare',
+            '08034567891',
+        ):
+            self.assertNotIn(real_name, seed_src)
+
+        self.assertEqual(self.fac.phone_display, 'Demo contact unavailable')
+        demo_cfg = {**settings.VENOMLINK_CONFIG, 'SYSTEM_DEMO_MODE': True}
+        with override_settings(VENOMLINK_CONFIG=demo_cfg):
+            for url in ('/facilities/', f'/facilities/{self.fac.id}/', '/api/facilities/'):
+                resp = self.client.get(url)
+                self.assertEqual(resp.status_code, 200)
+                body = resp.content.decode('utf-8')
+                self.assertIn('Demo contact unavailable', body)
+                self.assertNotIn('tel:None', body)
+
+            search_resp = self.client.get('/api/matching/search/?state=Gombe')
+            self.assertEqual(search_resp.status_code, 200)
+            results = search_resp.json()['results']
+            matched = [r for r in results if r['facility_id'] == self.fac.id][0]
+            self.assertIsNone(matched['phone'])
+            self.assertEqual(matched['phone_display'], 'Demo contact unavailable')
+            self.assertTrue(matched['is_demo'])
+
+            ussd_resp = self.client.post(
+                '/api/ussd/simulate/',
+                data=json.dumps({
+                    'sessionId': 'null-phone-test-01',
+                    'serviceCode': '*384*20#',
+                    'phoneNumber': 'DEMO-CALLER-TEST',
+                    'text': '1*1*1',
+                }),
+                content_type='application/json',
+            )
+            self.assertEqual(ussd_resp.status_code, 200)
+            self.assertIn('DEMO DATA', ussd_resp.json()['display_text'])
+
+    def test_task4_unified_threshold_boundaries_and_treatment_readiness(self):
+        from apps.analytics.forecasting import calculate_facility_forecast
+
+        # Build 30-day demand of 60 vials => avg_daily_consumption = 2.0 vials/day
+        fac, _ = make_facility(name='Threshold Hub', state='Gombe', lga='Kaltungo', stock=80, age_hours=2, expiry='06/27')
+        case = SnakebiteCase.objects.create(facility=fac, vials_used=60, outcome='RECOVERED')
+        SnakebiteCase.objects.filter(pk=case.pk).update(created_at=timezone.now() - timedelta(days=5))
+
+        # Exact 5.0 days_of_cover => CRITICAL + wording "at or below"
+        record_stock_update(fac, quantity=10, expiry_date='06/27', notes='Boundary test 5.0d')
+        fac.refresh_from_db()
+        forecast_5 = calculate_facility_forecast(fac)
+        self.assertEqual(forecast_5['days_of_cover'], 5.0)
+        self.assertEqual(forecast_5['stock_status'], 'CRITICAL')
+        evaluate_facility_alerts(fac)
+        crit_alert = Alert.objects.get(
+            facility=fac, alert_type=AlertType.POTENTIAL_STOCKOUT, status=AlertStatus.ACTIVE
+        )
+        self.assertEqual(crit_alert.severity, AlertSeverity.CRITICAL)
+        self.assertIn('at or below', crit_alert.message)
+        self.assertNotIn('below 5.0', crit_alert.message)
+
+        # > 5.0 and <= 7.0 (5.5 and 7.0) => LOW_STOCK
+        for vials, expected_doc in ((11, 5.5), (14, 7.0)):
+            record_stock_update(fac, quantity=vials, expiry_date='06/27', notes=f'Boundary test {expected_doc}d')
+            fac.refresh_from_db()
+            f = calculate_facility_forecast(fac)
+            self.assertEqual(f['days_of_cover'], expected_doc)
+            self.assertEqual(f['stock_status'], 'LOW_STOCK')
+            evaluate_facility_alerts(fac)
+            self.assertTrue(
+                Alert.objects.filter(
+                    facility=fac, alert_type=AlertType.LOW_STOCK, status=AlertStatus.ACTIVE
+                ).exists()
+            )
+            self.assertFalse(
+                Alert.objects.filter(
+                    facility=fac, alert_type=AlertType.POTENTIAL_STOCKOUT, status=AlertStatus.ACTIVE
+                ).exists()
+            )
+
+        # > 7.0 days of cover + >= 5 vials => AVAILABLE & all active alerts resolved
+        record_stock_update(fac, quantity=15, expiry_date='06/27', notes='Boundary test >7.0d')
+        fac.refresh_from_db()
+        f_ok = calculate_facility_forecast(fac)
+        self.assertGreater(f_ok['days_of_cover'], 7.0)
+        self.assertEqual(f_ok['stock_status'], 'AVAILABLE')
+        evaluate_facility_alerts(fac)
+        self.assertEqual(Alert.objects.filter(facility=fac, status=AlertStatus.ACTIVE).count(), 0)
+
+        # High days_of_cover (~60.0d) but only 4 vials => AVAILABLE + independent LOW_TREATMENT_READINESS
+        low_vial_fac, _ = make_facility(name='Low Vial Slow Demand Hub', state='Gombe', lga='Kaltungo', stock=4, age_hours=2, expiry='06/27')
+        slow_case = SnakebiteCase.objects.create(facility=low_vial_fac, vials_used=2, outcome='RECOVERED')
+        SnakebiteCase.objects.filter(pk=slow_case.pk).update(created_at=timezone.now() - timedelta(days=5))
+        f_slow = calculate_facility_forecast(low_vial_fac)
+        self.assertGreater(f_slow['days_of_cover'], 7.0)
+        self.assertEqual(f_slow['stock_status'], 'AVAILABLE')
+        self.assertTrue(f_slow['below_min_treatment_course'])
+        evaluate_facility_alerts(low_vial_fac)
+        self.assertFalse(
+            Alert.objects.filter(
+                facility=low_vial_fac,
+                alert_type__in=[AlertType.LOW_STOCK, AlertType.POTENTIAL_STOCKOUT],
+                status=AlertStatus.ACTIVE,
+            ).exists()
+        )
+        self.assertTrue(
+            Alert.objects.filter(
+                facility=low_vial_fac,
+                alert_type=AlertType.LOW_TREATMENT_READINESS,
+                status=AlertStatus.ACTIVE,
+            ).exists()
+        )
+
+    def test_task5_demo_mode_boundary_and_fail_closed_rbac(self):
+        from django.conf import settings
+        # In demo mode, dashboard & demo runner work; demo action rejects is_demo=False
+        demo_cfg = {**settings.VENOMLINK_CONFIG, 'SYSTEM_DEMO_MODE': True}
+        with override_settings(VENOMLINK_CONFIG=demo_cfg):
+            self.assertEqual(self.client.get('/').status_code, 200)
+            self.assertContains(self.client.get('/'), 'Prototype Demonstration Mode')
+            self.assertEqual(self.client.get('/demo-flow/').status_code, 200)
+            r_demo_ok = self.client.post(
+                '/demo-flow/action/',
+                data=json.dumps({'step': 1, 'facility_id': self.fac.id}),
+                content_type='application/json',
+            )
+            self.assertEqual(r_demo_ok.status_code, 200)
+            r_demo_blocked = self.client.post(
+                '/demo-flow/action/',
+                data=json.dumps({'step': 1, 'facility_id': self.non_demo_fac.id}),
+                content_type='application/json',
+            )
+            self.assertEqual(r_demo_blocked.status_code, 403)
+
+        public_user = make_user_with_role('pub_user_t5', UserRole.PUBLIC_USER)
+        unassigned_state = make_user_with_role('unassigned_st_t5', UserRole.STATE_OFFICIAL, assigned_state='')
+        unassigned_fac = make_user_with_role('unassigned_fac_t5', UserRole.FACILITY_ADMIN, facility=None)
+        gombe_official = make_user_with_role('gombe_off_t5', UserRole.STATE_OFFICIAL, assigned_state='Gombe')
+        gombe_fac_admin = make_user_with_role('gombe_adm_t5', UserRole.FACILITY_ADMIN, facility=self.fac)
+
+        non_demo_cfg = {**settings.VENOMLINK_CONFIG, 'SYSTEM_DEMO_MODE': False}
+        with override_settings(VENOMLINK_CONFIG=non_demo_cfg):
+            # Public search remains available
+            self.assertEqual(self.client.get('/api/matching/search/?state=Gombe').status_code, 200)
+
+            # Anonymous blocked from operational views & APIs
+            for view_path in ('/', '/alerts/', '/facilities/', f'/facilities/{self.fac.id}/', '/redistribution/'):
+                r = self.client.get(view_path)
+                self.assertEqual(r.status_code, 302)
+                self.assertIn('/accounts/login/', r['Location'])
+            for api_path in ('/api/analytics/alerts/', '/api/analytics/redistribution/', '/api/facilities/'):
+                self.assertEqual(self.client.get(api_path).status_code, 403)
+            self.assertEqual(self.client.get('/demo-flow/').status_code, 404)
+
+            # PUBLIC_USER & unassigned officials fail closed (403)
+            for bad_user in (public_user, unassigned_state, unassigned_fac):
+                self.client.force_login(bad_user)
+                self.assertEqual(self.client.get('/').status_code, 403)
+                self.assertEqual(self.client.get('/api/facilities/').status_code, 403)
+                self.assertEqual(self.client.get('/api/analytics/alerts/').status_code, 403)
+
+            # Scoped STATE_OFFICIAL sees own state only
+            self.client.force_login(gombe_official)
+            self.assertEqual(self.client.get('/').status_code, 200)
+            fac_rows = self.client.get('/api/facilities/').json()
+            if isinstance(fac_rows, dict) and 'results' in fac_rows:
+                fac_rows = fac_rows['results']
+            self.assertTrue(len(fac_rows) >= 1)
+            self.assertTrue(all(r['state'] == 'Gombe' for r in fac_rows))
+            self.assertEqual(self.client.get(f'/facilities/{self.other_fac.id}/').status_code, 403)
+
+            # Scoped FACILITY_ADMIN cannot view redistribution or another facility
+            self.client.force_login(gombe_fac_admin)
+            self.assertEqual(self.client.get(f'/facilities/{self.fac.id}/').status_code, 200)
+            self.assertEqual(self.client.get(f'/facilities/{self.other_fac.id}/').status_code, 403)
+            self.assertEqual(self.client.get('/redistribution/').status_code, 403)
+            self.assertEqual(self.client.get('/api/analytics/redistribution/').status_code, 403)

@@ -190,6 +190,45 @@ class DemoModeOrAuthenticated(permissions.BasePermission):
         return is_demo_mode()
 
 
+class DemoModeOrOperationalRole(permissions.BasePermission):
+    """
+    Allows read access anonymously ONLY when SYSTEM_DEMO_MODE is enabled.
+    When SYSTEM_DEMO_MODE is False, requires an authenticated user with a valid,
+    properly-scoped operational role (never PUBLIC_USER, never unassigned scope).
+    """
+    def has_permission(self, request, view):
+        if request.method in permissions.SAFE_METHODS and is_demo_mode():
+            return True
+        if not request.user or not request.user.is_authenticated:
+            return False
+        role = get_user_role(request.user)
+        if role == UserRole.SYSTEM_ADMIN:
+            return True
+        if role == UserRole.STATE_OFFICIAL:
+            return bool(get_user_assigned_state(request.user))
+        if role in (UserRole.FACILITY_ADMIN, UserRole.FACILITY_REPORTER):
+            return bool(get_user_facility_id(request.user))
+        return False
+
+
+class DemoModeOrStateOrSystemOfficial(permissions.BasePermission):
+    """
+    Allows read access anonymously ONLY when SYSTEM_DEMO_MODE is enabled.
+    Outside demo mode, restricted to SYSTEM_ADMIN and scoped STATE_OFFICIAL.
+    """
+    def has_permission(self, request, view):
+        if request.method in permissions.SAFE_METHODS and is_demo_mode():
+            return True
+        if not request.user or not request.user.is_authenticated:
+            return False
+        role = get_user_role(request.user)
+        if role == UserRole.SYSTEM_ADMIN:
+            return True
+        if role == UserRole.STATE_OFFICIAL:
+            return bool(get_user_assigned_state(request.user))
+        return False
+
+
 class DemoModeOnly(permissions.BasePermission):
     """Endpoint exists only when SYSTEM_DEMO_MODE is enabled (e.g. the USSD browser simulator)."""
     def has_permission(self, request, view):

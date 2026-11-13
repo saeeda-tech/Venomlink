@@ -187,6 +187,8 @@ def rank_facilities_for_query(
             'state': fac.state,
             'lga': fac.lga,
             'phone': fac.phone,
+            'phone_display': fac.phone_display,
+            'is_demo': fac.is_demo,
             'stock': stock,
             'latest_expiry': fac.latest_expiry,
             'expiry_status': fac.expiry_status,

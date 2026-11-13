@@ -1,13 +1,16 @@
 {% extends 'base.html' %}
 
-{% block title %}Facilities Directory — VenomLink{% endblock %}
+{% block title %}Facilities Directory — VENOMLINK (Prototype — USPF Changemaker Challenge 2026){% endblock %}
 
 {% block content %}
 <div class="page-header">
   <div>
     <h1 class="page-title">Health Facilities Registry</h1>
     <p class="page-description">
-      Master operational registry of accredited treatment centres, current recorded antivenom stock, batch expiry status, and verification freshness ({{ period_days }}-day window).
+      {% if demo_mode %}Demonstration registry of simulated facilities, recorded stock, batch expiry status, and
+      verification freshness ({{ period_days }}-day window).{% else %}Operational registry of participating facilities,
+      current recorded antivenom stock, batch expiry status, and verification freshness ({{ period_days }}-day
+      window).{% endif %}
     </p>
   </div>
 </div>
@@ -18,20 +21,15 @@
     <input type="hidden" name="state" value="{{ state_filter }}">
     <input type="hidden" name="period" value="{{ selected_period }}">
 
-    <input
-      type="text"
-      name="q"
-      value="{{ search_query }}"
-      placeholder="Search facility name, LGA, or phone..."
-      class="search-input"
-    >
+    <input type="text" name="q" value="{{ search_query }}" placeholder="Search facility name, LGA, or phone..."
+      class="search-input">
 
     <div style="display: flex; align-items: center; gap: 6px;">
       <label for="lga-select" style="font-size: 0.84rem; font-weight: 600;">LGA:</label>
       <select id="lga-select" name="lga" class="control-select" onchange="this.form.submit()">
         <option value="">All LGAs</option>
         {% for l in available_lgas %}
-          <option value="{{ l }}" {% if lga_filter == l %}selected{% endif %}>{{ l }}</option>
+        <option value="{{ l }}" {% if lga_filter == l %}selected{% endif %}>{{ l }}</option>
         {% endfor %}
       </select>
     </div>
@@ -59,7 +57,8 @@
 
     <button type="submit" class="btn btn-secondary btn-sm">Filter</button>
     {% if search_query or lga_filter or status_filter or freshness_filter %}
-      <a href="{% url 'dashboard:facilities' %}?state={{ state_filter }}&amp;period={{ selected_period }}" class="btn btn-secondary btn-sm">Clear</a>
+    <a href="{% url 'dashboard:facilities' %}?state={{ state_filter }}&amp;period={{ selected_period }}"
+      class="btn btn-secondary btn-sm">Clear</a>
     {% endif %}
   </form>
 
@@ -78,51 +77,53 @@
       </thead>
       <tbody>
         {% for fac in facilities %}
-          <tr>
-            <td>
-              <a href="{% url 'dashboard:facility-detail' fac.id %}" style="font-weight: 600; color: var(--color-primary); text-decoration: none;">
-                {{ fac.name }}
-              </a>
-              <div style="font-size: 0.78rem; color: #546E7A;">
-                {{ fac.get_facility_type_display }} &bull; {{ fac.phone }} &bull; {{ fac.state }}
-              </div>
-            </td>
-            <td><strong>{{ fac.lga }}</strong></td>
-            <td style="font-size: 0.84rem;">
-              <div><strong>{{ fac.latest_expiry }}</strong></div>
-              <div style="font-size: 0.75rem; {% if fac.expiry_status == 'EXPIRED' %}color: #B71C1C; font-weight: 700;{% elif fac.expiry_status == 'EXPIRING_SOON' %}color: #D97706; font-weight: 600;{% else %}color: #546E7A;{% endif %}">
-                {{ fac.expiry_status_label }}
-              </div>
-            </td>
-            <td style="text-align: right; font-variant-numeric: tabular-nums;">
-              <strong style="font-size: 1.05rem;">{{ fac.usable_stock }}</strong> vials
-              <div style="font-size: 0.76rem; color: #546E7A;">
-                {{ fac.period_doc }}
-              </div>
-              <div style="font-size: 0.72rem; color: #78909C;">
-                {{ fac.period_confidence_label }}
-              </div>
-            </td>
-            <td>
-              <span class="freshness-tag {% if fac.is_stale %}urgent-warning{% endif %}">
-                {{ fac.freshness_label }}
-              </span>
-            </td>
-            <td>
-              <span class="status-badge {{ fac.stock_status|lower }}">
-                {{ fac.stock_status_label }}
-              </span>
-            </td>
-            <td style="text-align: center;">
-              <a href="{% url 'dashboard:facility-detail' fac.id %}" class="btn-action-view">View</a>
-            </td>
-          </tr>
+        <tr>
+          <td>
+            <a href="{% url 'dashboard:facility-detail' fac.id %}"
+              style="font-weight: 600; color: var(--color-primary); text-decoration: none;">
+              {{ fac.name }}
+            </a>
+            <div style="font-size: 0.78rem; color: #546E7A;">
+              {{ fac.get_facility_type_display }} &bull; {{ fac.phone_display }} &bull; {{ fac.state }}
+            </div>
+          </td>
+          <td><strong>{{ fac.lga }}</strong></td>
+          <td style="font-size: 0.84rem;">
+            <div><strong>{{ fac.latest_expiry }}</strong></div>
+            <div
+              style="font-size: 0.75rem; {% if fac.expiry_status == 'EXPIRED' %}color: #B71C1C; font-weight: 700;{% elif fac.expiry_status == 'EXPIRING_SOON' %}color: #D97706; font-weight: 600;{% else %}color: #546E7A;{% endif %}">
+              {{ fac.expiry_status_label }}
+            </div>
+          </td>
+          <td style="text-align: right; font-variant-numeric: tabular-nums;">
+            <strong style="font-size: 1.05rem;">{{ fac.usable_stock }}</strong> vials
+            <div style="font-size: 0.76rem; color: #546E7A;">
+              {{ fac.period_doc }}
+            </div>
+            <div style="font-size: 0.72rem; color: #78909C;">
+              {{ fac.period_confidence_label }}
+            </div>
+          </td>
+          <td>
+            <span class="freshness-tag {% if fac.is_stale %}urgent-warning{% endif %}">
+              {{ fac.freshness_label }}
+            </span>
+          </td>
+          <td>
+            <span class="status-badge {{ fac.stock_status|lower }}">
+              {{ fac.stock_status_label }}
+            </span>
+          </td>
+          <td style="text-align: center;">
+            <a href="{% url 'dashboard:facility-detail' fac.id %}" class="btn-action-view">View</a>
+          </td>
+        </tr>
         {% empty %}
-          <tr>
-            <td colspan="7" style="text-align: center; color: #546E7A; padding: 36px;">
-              No facilities found matching current filters.
-            </td>
-          </tr>
+        <tr>
+          <td colspan="7" style="text-align: center; color: #546E7A; padding: 36px;">
+            No facilities found matching current filters.
+          </td>
+        </tr>
         {% endfor %}
       </tbody>
     </table>

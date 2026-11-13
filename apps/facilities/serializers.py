@@ -49,6 +49,10 @@ class FacilitySerializer(serializers.ModelSerializer):
     days_of_cover_display = serializers.CharField(read_only=True)
     consumption_confidence = serializers.CharField(read_only=True)
     consumption_confidence_label = serializers.CharField(read_only=True)
+    phone = serializers.CharField(allow_null=True, allow_blank=True, required=False)
+    phone_display = serializers.CharField(read_only=True)
+    is_demo = serializers.BooleanField(read_only=True)
+    below_min_treatment_course = serializers.BooleanField(read_only=True)
     stock_status = serializers.CharField(read_only=True)
     stock_status_label = serializers.CharField(read_only=True)
     stock_status_color = serializers.CharField(read_only=True)
@@ -58,11 +62,12 @@ class FacilitySerializer(serializers.ModelSerializer):
         model = Facility
         fields = [
             'id', 'name', 'facility_type', 'facility_type_display', 'state', 'lga',
-            'latitude', 'longitude', 'phone', 'verified',
+            'latitude', 'longitude', 'phone', 'phone_display', 'is_demo', 'verified',
             'resupply_lead_time_days', 'safety_buffer_days', 'created_at',
             'current_stock', 'usable_stock', 'latest_expiry', 'expiry_status',
             'expiry_status_label', 'has_expired_stock', 'last_confirmed_at',
             'freshness_status', 'freshness_label', 'days_of_cover',
             'days_of_cover_display', 'consumption_confidence', 'consumption_confidence_label',
-            'stock_status', 'stock_status_label', 'stock_status_color'
+            'stock_status', 'stock_status_label', 'stock_status_color',
+            'below_min_treatment_course',
         ]

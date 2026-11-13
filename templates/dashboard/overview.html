@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 
-{% block title %}Operational Overview — VenomLink{% endblock %}
+{% block title %}Operational Overview — VENOMLINK (Prototype — USPF Changemaker Challenge 2026){% endblock %}
 
 {% block content %}
 <div class="page-header">
@@ -28,7 +28,8 @@
   <div class="indicator-box">
     <div class="indicator-label">Participating Facilities</div>
     <div class="indicator-value">{{ total_facilities }}</div>
-    <div class="indicator-meta">Verified public health centres</div>
+    <div class="indicator-meta">{% if demo_mode %}Demo facilities (simulated data){% else %}Registered participating
+      facilities{% endif %}</div>
   </div>
 
   <div class="indicator-box">
@@ -39,10 +40,11 @@
 
   <div class="indicator-box {% if requiring_attention > 0 %}critical-attention{% endif %}">
     <div class="indicator-label">Facilities Requiring Attention</div>
-    <div class="indicator-value" style="{% if requiring_attention > 0 %}color: var(--color-status-critical);{% endif %}">
+    <div class="indicator-value"
+      style="{% if requiring_attention > 0 %}color: var(--color-status-critical);{% endif %}">
       {{ requiring_attention }}
     </div>
-    <div class="indicator-meta">Stockout risk or days of cover &le; 5d</div>
+    <div class="indicator-meta">Critical (&le; 5d), Low (&gt; 5d &ndash; 7d), or below course assumption</div>
   </div>
 
   <div class="indicator-box {% if data_not_confirmed > 0 %}unconfirmed{% endif %}">
@@ -61,13 +63,14 @@
       <span>Antivenom Stock Distribution Map</span>
     </div>
     <div class="map-legend">
-      <span class="legend-item"><span class="legend-dot green"></span> Available &amp; Confirmed</span>
-      <span class="legend-item"><span class="legend-dot amber"></span> Low Stock (&le; 7d cover)</span>
-      <span class="legend-item"><span class="legend-dot red"></span> Critical / Stock-out</span>
+      <span class="legend-item"><span class="legend-dot green"></span> Normal (&gt; 7d cover)</span>
+      <span class="legend-item"><span class="legend-dot amber"></span> Low Stock (&gt; 5d &ndash; 7d cover)</span>
+      <span class="legend-item"><span class="legend-dot red"></span> Critical / Stock-out (&le; 5d cover or 0
+        vials)</span>
       <span class="legend-item"><span class="legend-dot grey"></span> Unconfirmed (&gt; 48h)</span>
     </div>
   </div>
-  
+
   <script id="facilities-map-data" type="application/json">{{ map_facilities_json|safe }}</script>
   <div id="operational-map"></div>
 </section>
@@ -94,33 +97,34 @@
         </thead>
         <tbody>
           {% for alert in recent_alerts %}
-            <tr>
-              <td>
-                <span class="severity-pill {{ alert.severity|lower }}">
-                  {{ alert.get_severity_display }}
-                </span>
-              </td>
-              <td>
-                <strong>{{ alert.facility.name }}</strong>
-                <div style="font-size: 0.78rem; color: #546E7A;">{{ alert.facility.lga }}, {{ alert.facility.state }}</div>
-              </td>
-              <td>{{ alert.message }}</td>
-              <td>
-                <strong>{{ alert.current_stock }}</strong> vials
-                <div style="font-size: 0.78rem; color: #546E7A;">
-                  {% if alert.days_of_cover is not None %}{{ alert.days_of_cover }}d cover{% else %}No usage history{% endif %}
-                </div>
-              </td>
-              <td>
-                <a href="{% url 'dashboard:facility-detail' alert.facility.id %}" class="btn-action-view">View</a>
-              </td>
-            </tr>
+          <tr>
+            <td>
+              <span class="severity-pill {{ alert.severity|lower }}">
+                {{ alert.get_severity_display }}
+              </span>
+            </td>
+            <td>
+              <strong>{{ alert.facility.name }}</strong>
+              <div style="font-size: 0.78rem; color: #546E7A;">{{ alert.facility.lga }}, {{ alert.facility.state }}
+              </div>
+            </td>
+            <td>{{ alert.message }}</td>
+            <td>
+              <strong>{{ alert.current_stock }}</strong> vials
+              <div style="font-size: 0.78rem; color: #546E7A;">
+                {% if alert.days_of_cover is not None %}{{ alert.days_of_cover }}d cover{% else %}No usage history{% endif %}
+              </div>
+            </td>
+            <td>
+              <a href="{% url 'dashboard:facility-detail' alert.facility.id %}" class="btn-action-view">View</a>
+            </td>
+          </tr>
           {% empty %}
-            <tr>
-              <td colspan="5" style="text-align: center; color: #546E7A; padding: 24px;">
-                No active operational alerts. All facilities are reporting adequate stock coverage.
-              </td>
-            </tr>
+          <tr>
+            <td colspan="5" style="text-align: center; color: #546E7A; padding: 24px;">
+              No active operational alerts. All facilities are reporting adequate stock coverage.
+            </td>
+          </tr>
           {% endfor %}
         </tbody>
       </table>
@@ -146,30 +150,31 @@
         </thead>
         <tbody>
           {% for tx in recent_transactions %}
-            <tr>
-              <td>
-                <strong>{{ tx.facility.name }}</strong>
-                <div style="font-size: 0.76rem; color: #546E7A;">{{ tx.facility.lga }}</div>
-              </td>
-              <td>
-                <span class="status-badge {% if tx.transaction_type == 'USED' %}low{% elif tx.transaction_type == 'RECEIVED' %}available{% else %}stale{% endif %}">
-                  {{ tx.get_transaction_type_display }}
-                </span>
-              </td>
-              <td>
-                <strong>{{ tx.stock_after }}</strong> vials
-                <span style="font-size: 0.76rem; color: #546E7A;">({{ tx.quantity }})</span>
-              </td>
-              <td style="font-size: 0.78rem; color: #546E7A; white-space: nowrap;">
-                {{ tx.timestamp|date:"d M, H:i" }}
-              </td>
-            </tr>
+          <tr>
+            <td>
+              <strong>{{ tx.facility.name }}</strong>
+              <div style="font-size: 0.76rem; color: #546E7A;">{{ tx.facility.lga }}</div>
+            </td>
+            <td>
+              <span
+                class="status-badge {% if tx.transaction_type == 'USED' %}low{% elif tx.transaction_type == 'RECEIVED' %}available{% else %}stale{% endif %}">
+                {{ tx.get_transaction_type_display }}
+              </span>
+            </td>
+            <td>
+              <strong>{{ tx.stock_after }}</strong> vials
+              <span style="font-size: 0.76rem; color: #546E7A;">({{ tx.quantity }})</span>
+            </td>
+            <td style="font-size: 0.78rem; color: #546E7A; white-space: nowrap;">
+              {{ tx.timestamp|date:"d M, H:i" }}
+            </td>
+          </tr>
           {% empty %}
-            <tr>
-              <td colspan="4" style="text-align: center; color: #546E7A; padding: 24px;">
-                No recent transactions recorded.
-              </td>
-            </tr>
+          <tr>
+            <td colspan="4" style="text-align: center; color: #546E7A; padding: 24px;">
+              No recent transactions recorded.
+            </td>
+          </tr>
           {% endfor %}
         </tbody>
       </table>
@@ -181,4 +186,3 @@
 {% block extra_scripts %}
 <script src="/static/js/map.js"></script>
 {% endblock %}
-

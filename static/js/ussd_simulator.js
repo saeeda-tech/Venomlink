@@ -33,7 +33,7 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   function executeUssdRequest(userEntry) {
-    const phone = phoneSelect ? phoneSelect.value : '+2348030000001';
+    const phone = phoneSelect ? phoneSelect.value : 'DEMO-STAFF-001';
 
     let textToSend = '';
     if (userEntry) {

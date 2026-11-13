@@ -475,16 +475,19 @@ class UssdSessionHandler:
         if not results or results[0]['stock'] == 0:
             return (
                 f"END No confirmed antivenom currently available in {selected_lga or selected_state}.\n\n"
-                f"Please contact National Emergency: 112 or State Health Board."
+                f"Please contact emergency services (112) or local health authorities."
             )
 
-        lines = ["END Nearest available antivenom:\n"]
-        sms_lines = [f"VenomLink: Antivenom availability for {selected_lga}, {selected_state}:\n"]
+        has_demo = any(res.get('is_demo') for res in results[:2])
+        header = "END Nearest antivenom (DEMO DATA):\n" if has_demo else "END Nearest available antivenom:\n"
+        lines = [header]
+        sms_prefix = "VenomLink (DEMO - Simulated Data)" if has_demo else "VenomLink"
+        sms_lines = [f"{sms_prefix}: Antivenom availability for {selected_lga}, {selected_state}:\n"]
 
         for idx, res in enumerate(results[:2], start=1):
             name = res['name']
             stock = res['stock']
-            phone = res['phone']
+            phone = res.get('phone_display') or res.get('phone') or "Contact unavailable"
             label = res['last_confirmed_label']
             dist = res['distance_km']
 
@@ -499,7 +502,7 @@ class UssdSessionHandler:
                 lines.append(f"{label}")
                 lines.append(f"Approx. {dist} km away\n")
 
-            sms_lines.append(f"{idx}. {name}: {stock} vials ({label}). Tel: {phone}")
+            sms_lines.append(f"{idx}. {name}: {stock} vials ({label}). Contact: {phone}")
 
         lines.append("Details sent via SMS.")
 

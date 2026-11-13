@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 
-{% block title %}90-Second Operational Demo — VenomLink{% endblock %}
+{% block title %}90-Second Operational Demo — VENOMLINK (Prototype — USPF Changemaker Challenge 2026){% endblock %}
 
 {% block content %}
 <div class="page-header">
@@ -103,7 +103,7 @@
       Steps 5 &amp; 6 &bull; Automated Alert &amp; State Official Monitoring
     </div>
     <h3 style="font-size: 1.1rem; color: var(--color-slate); margin: 4px 0 8px 0;">
-      Critical Stock-Out Alert Generated &amp; Visible on Ministry Dashboard
+      Critical Stock-Out Alert Generated &amp; Visible on Operations Dashboard
     </h3>
     <p style="font-size: 0.86rem; color: #546E7A; margin-bottom: 12px;">
       The stock intelligence engine calculates: <em>Days of Cover &le; Reorder Cushion</em>. Generates critical alert:
@@ -125,27 +125,22 @@
 <script>
 function executeDemoStep(step) {
   const facId = {{ demo_facility.id }};
-  const reporterPhone = "{{ demo_reporter.phone_number|default:'+2348030000001' }}";
   const csrfToken = window.getCsrfToken ? window.getCsrfToken() : '';
-  
+
   if (step === 1) {
     const status = document.getElementById('demo-step1-status');
-    status.textContent = 'Authenticating staff PIN & updating stock to 6 vials...';
+    status.textContent = 'Running simulated demo facility stock update (6 vials)...';
     status.style.color = '#546E7A';
 
-    fetch('/api/inventory/update-stock/', {
+    fetch('/demo-flow/action/', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'X-CSRFToken': csrfToken
       },
       body: JSON.stringify({
-        facility_id: facId,
-        quantity: 6,
-        expiry_date: '06/27',
-        phone_number: reporterPhone,
-        pin: '1234',
-        notes: '90-Second Demo: Verified Physical Count'
+        step: 1,
+        facility_id: facId
       })
     })
       .then(async res => {
@@ -162,7 +157,7 @@ function executeDemoStep(step) {
         status.style.color = '#B71C1C';
       });
   }
-  
+
   else if (step === 2) {
     const status = document.getElementById('demo-step2-status');
     const container = document.getElementById('demo-step2-results');
@@ -193,9 +188,10 @@ function executeDemoStep(step) {
 
         let html = '<div style="background: #F1F3F0; padding: 10px; border-radius: 4px; font-size: 0.82rem; font-family: monospace;">';
         data.results.forEach((r, idx) => {
-          html += `<div><strong>${idx + 1}. ${r.name}</strong> &bull; ${r.stock} vials &bull; ${r.last_confirmed_label} &bull; Score: ${r.ranking_score} &bull; Call: ${r.phone}</div>`;
+          const contact = r.phone_display || r.phone || 'Demo contact unavailable';
+          html += `<div><strong>${idx + 1}. ${r.name}</strong> &bull; ${r.stock} vials &bull; ${r.last_confirmed_label} &bull; Score: ${r.ranking_score} &bull; Contact: ${contact}</div>`;
         });
-        html += '<div style="color: #1E7E34; margin-top: 4px;">&check; SMS confirmation dispatched to caller.</div></div>';
+        html += '<div style="color: #1E7E34; margin-top: 4px;">&check; Simulated search confirmation logged.</div></div>';
         container.innerHTML = html;
       })
       .catch(e => {
@@ -206,22 +202,18 @@ function executeDemoStep(step) {
 
   else if (step === 4) {
     const status = document.getElementById('demo-step4-status');
-    status.textContent = 'Authenticating staff PIN & recording case (4 vials)...';
+    status.textContent = 'Recording simulated snakebite case (4 vials)...';
     status.style.color = '#546E7A';
 
-    fetch('/api/inventory/report-case/', {
+    fetch('/demo-flow/action/', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'X-CSRFToken': csrfToken
       },
       body: JSON.stringify({
-        facility_id: facId,
-        vials_used: 4,
-        outcome: 'RECOVERED',
-        phone_number: reporterPhone,
-        pin: '1234',
-        notes: '90-Second Demo: Severe envenomation surge'
+        step: 4,
+        facility_id: facId
       })
     })
       .then(async res => {
@@ -230,7 +222,7 @@ function executeDemoStep(step) {
         return data;
       })
       .then(data => {
-        status.textContent = 'Clinical case logged. 4 vials deducted! Stock is now 2 vials (Critical threshold reached).';
+        status.textContent = 'Clinical case logged. 4 vials deducted! Usable stock is now ' + data.usable_stock + ' vials (' + data.stock_status + ').';
         status.style.color = '#B71C1C';
       })
       .catch(e => {

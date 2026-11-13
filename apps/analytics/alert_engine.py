@@ -1,20 +1,21 @@
 """
 Operational Alert Engine and Redistribution Intelligence for VenomLink.
 
-Generates deterministic, deduplicated alerts for:
-- POTENTIAL_STOCKOUT (0 vials STOCK_OUT, 1-2 vials CRITICAL, or high-confidence days_of_cover <= reorder_buffer)
-- LOW_STOCK (3-4 vials or high-confidence days_of_cover <= reorder_buffer + 3)
+Generates deterministic, deduplicated alerts from the single-source-of-truth classifier:
+- POTENTIAL_STOCKOUT (0 usable vials, expired batch, or days_of_cover <= 5.0)
+- LOW_STOCK (5.0 < days_of_cover <= 7.0)
+- LOW_TREATMENT_READINESS (independent check: usable vials < MIN_TREATMENT_COURSE_VIALS)
 - STALE_DATA (>48h without confirmation)
 - EXPIRY_RISK (CRITICAL if expired, WARNING if expiring within 60 days)
 
 Automatically resolves open alerts when inventory conditions recover.
 """
 
-from django.conf import settings
 from django.utils import timezone
-from apps.facilities.models import Facility, ConsumptionConfidence
+from apps.facilities.models import Facility
 from .models import Alert, AlertType, AlertSeverity, AlertStatus
 from .forecasting import calculate_facility_forecast
+from .thresholds import classify_facility_stock, get_stock_threshold_config
 from apps.matching.engine import haversine_distance_km
 
 
@@ -79,35 +80,27 @@ def _resolve_open_alerts(facility: Facility, alert_type: str):
 
 def evaluate_facility_alerts(facility: Facility):
     """
-    Evaluates operational health for a single facility using configurable thresholds
-    and updates/resolves alerts deterministically.
+    Evaluates operational health for a single facility using the single-source-of-truth
+    threshold classifier and updates/resolves alerts deterministically.
     """
-    cfg = getattr(settings, 'VENOMLINK_CONFIG', {})
-    stock_out_thresh = cfg.get('STOCK_OUT_THRESHOLD', 0)
-    crit_max_vials = cfg.get('CRITICAL_STOCK_MAX_VIALS', 2)
-    low_max_vials = cfg.get('LOW_STOCK_MAX_VIALS', 4)
-    exp_warn_days = cfg.get('EXPIRY_WARNING_DAYS', 60)
+    tcfg = get_stock_threshold_config()
+    stock_out_thresh = tcfg['stock_out_threshold']
+    critical_doc = tcfg['critical_days_of_cover']
+    warning_doc = tcfg['warning_days_of_cover']
+    min_course_vials = tcfg['min_treatment_course_vials']
+    exp_warn_days = tcfg['expiry_warning_days']
 
     forecast = calculate_facility_forecast(facility)
     physical_stock = forecast['current_stock']
     usable_stock = forecast['usable_stock']
     days_of_cover = forecast['days_of_cover']
     daily_usage = forecast['average_daily_usage']
-    confidence = forecast['consumption_confidence']
-    reorder_buffer = forecast['reorder_buffer_days']
+    stock_status = forecast['stock_status']
+    below_min_course = forecast['below_min_treatment_course']
 
-    # 1. EVALUATE STOCK-OUT & CRITICAL INVENTORY (0 vials OR 1-2 vials OR high-confidence DoC <= buffer)
-    is_stockout_or_critical = (
-        usable_stock <= crit_max_vials
-        or (
-            confidence == ConsumptionConfidence.HIGH_CONFIDENCE
-            and days_of_cover is not None
-            and days_of_cover <= reorder_buffer
-        )
-    )
-
-    if is_stockout_or_critical:
-        if usable_stock <= stock_out_thresh:
+    # 1. EVALUATE STOCK-OUT & CRITICAL DAYS OF COVER (0 usable vials or days_of_cover <= 5.0)
+    if stock_status in ('STOCK_OUT', 'CRITICAL'):
+        if usable_stock <= stock_out_thresh or facility.has_expired_stock:
             if physical_stock > 0 and facility.has_expired_stock:
                 msg = (
                     f"{facility.name} has 0 usable vials ({physical_stock} vials on hand are EXPIRED: "
@@ -118,20 +111,10 @@ def evaluate_facility_alerts(facility: Facility):
                     f"{facility.name} has exhausted antivenom reserves (0 vials remaining). "
                     f"Immediate emergency resupply required."
                 )
-        elif usable_stock <= crit_max_vials:
-            doc_note = (
-                f"Estimated cover: {days_of_cover} days ({daily_usage}/day)."
-                if days_of_cover is not None
-                else "Consumption history insufficient for days-of-cover forecast."
-            )
-            msg = (
-                f"Critical antivenom shortage at {facility.name}: only {usable_stock} usable vial(s) "
-                f"remaining (threshold <= {crit_max_vials} vials). {doc_note}"
-            )
         else:
             msg = (
-                f"{facility.name} projected to run out of antivenom within {days_of_cover} days "
-                f"(below {reorder_buffer}-day replenishment threshold). "
+                f"{facility.name}: estimated {days_of_cover} days of cover "
+                f"(at or below the {critical_doc:.1f}-day critical threshold). "
                 f"Current stock: {usable_stock} vials, average usage: {daily_usage}/day."
             )
 
@@ -147,25 +130,12 @@ def evaluate_facility_alerts(facility: Facility):
     else:
         _resolve_open_alerts(facility, AlertType.POTENTIAL_STOCKOUT)
 
-    # 2. EVALUATE LOW STOCK WARNING (3-4 vials OR high-confidence DoC <= reorder_buffer + 3)
-    is_low_stock = (not is_stockout_or_critical) and (
-        usable_stock <= low_max_vials
-        or (
-            confidence == ConsumptionConfidence.HIGH_CONFIDENCE
-            and days_of_cover is not None
-            and days_of_cover <= (reorder_buffer + 3)
-        )
-    )
-
-    if is_low_stock:
-        doc_note = (
-            f"{days_of_cover} days of cover at {daily_usage} vials/day"
-            if days_of_cover is not None
-            else "usage history insufficient for forecast"
-        )
+    # 2. EVALUATE LOW STOCK WARNING (5.0 < days_of_cover <= 7.0)
+    if stock_status == 'LOW_STOCK':
         msg = (
-            f"{facility.name} has low antivenom reserves: {usable_stock} vials remaining "
-            f"({doc_note}). Schedule replenishment."
+            f"{facility.name}: {usable_stock} usable vials remaining "
+            f"({days_of_cover} days of cover at {daily_usage} vials/day; "
+            f"within >{critical_doc:.1f} to {warning_doc:.1f}-day warning window). Schedule replenishment."
         )
         _upsert_single_open_alert(
             facility=facility,
@@ -178,6 +148,35 @@ def evaluate_facility_alerts(facility: Facility):
         )
     else:
         _resolve_open_alerts(facility, AlertType.LOW_STOCK)
+
+    # 2b. INDEPENDENT TREATMENT-COURSE ADEQUACY ALERT (usable vials < MIN_TREATMENT_COURSE_VIALS)
+    if below_min_course:
+        doc_context = (
+            f"while days of cover is {days_of_cover} days"
+            if days_of_cover is not None
+            else "usage history insufficient for days-of-cover forecast"
+        )
+        msg = (
+            f"Below minimum treatment course planning assumption at {facility.name}: "
+            f"{usable_stock} usable vial(s) remaining (assumption < {min_course_vials} vials; "
+            f"requires local clinical validation), {doc_context}."
+        )
+        readiness_severity = (
+            AlertSeverity.CRITICAL
+            if (usable_stock <= 2 and days_of_cover is None)
+            else AlertSeverity.WARNING
+        )
+        _upsert_single_open_alert(
+            facility=facility,
+            alert_type=AlertType.LOW_TREATMENT_READINESS,
+            severity=readiness_severity,
+            message=msg,
+            current_stock=usable_stock,
+            days_of_cover=days_of_cover,
+            daily_usage=daily_usage
+        )
+    else:
+        _resolve_open_alerts(facility, AlertType.LOW_TREATMENT_READINESS)
 
     # 3. EVALUATE STALE DATA
     if facility.is_stale:
@@ -247,12 +246,16 @@ def evaluate_all_alerts():
 
 def find_redistribution_recommendations(state: str = None, max_distance_km: float = 120.0):
     """
-    Identifies safe redistribution pairs:
-    - Donor facility: Confirmed (non-stale), non-expired stock >= 10 vials, and either
-      high/low confidence days of cover >= 8.0 or low historical demand.
-    - Recipient facility: Usable stock <= 4 vials or high-confidence days of cover <= reorder buffer.
+    Identifies safe redistribution pairs using the shared stock threshold rules:
+    - Donor facility: Confirmed (non-stale), non-expired stock >= 10 vials, and
+      days_of_cover > WARNING_DAYS_OF_COVER_THRESHOLD (or no usage history).
+    - Recipient facility: STOCK_OUT / CRITICAL / LOW_STOCK (days_of_cover <= 7.0 or 0 usable)
+      or below minimum treatment course with <= 2 usable vials.
     - Distance <= max_distance_km.
     """
+    tcfg = get_stock_threshold_config()
+    warning_doc = tcfg['warning_days_of_cover']
+
     facilities_qs = Facility.objects.filter(verified=True).prefetch_related('inventory_transactions', 'cases')
     if state:
         facilities_qs = facilities_qs.filter(state__iexact=state.strip())
@@ -266,14 +269,20 @@ def find_redistribution_recommendations(state: str = None, max_distance_km: floa
         usable = fac.usable_stock
         daily_usage = fac.calculate_average_daily_usage(days=30)
         days_of_cover = fac.days_of_cover
-        reorder_buffer = fac.resupply_lead_time_days + fac.safety_buffer_days
+        classification = classify_facility_stock(
+            usable_stock=usable,
+            has_expired_stock=fac.has_expired_stock,
+            is_stale=fac.is_stale,
+            days_of_cover=days_of_cover,
+        )
+        status = classification['stock_status']
 
-        # Donor must have non-expired, non-stale stock >= 10 vials
+        # Donor must have non-expired, non-stale stock >= 10 vials and > warning_doc cover
         can_donate = (
             usable >= 10
             and not fac.has_expired_stock
             and not fac.is_stale
-            and (days_of_cover is None or days_of_cover >= 8.0)
+            and (days_of_cover is None or days_of_cover > warning_doc)
         )
         if can_donate:
             reserved_vials = int(daily_usage * 7) if daily_usage > 0 else 6
@@ -287,21 +296,17 @@ def find_redistribution_recommendations(state: str = None, max_distance_km: floa
                 'safe_surplus': safe_surplus
             })
 
-        # Recipient: critical/low stock or high-confidence days_of_cover <= reorder_buffer
         needs_stock = (
-            usable <= 4
-            or (
-                fac.consumption_confidence == ConsumptionConfidence.HIGH_CONFIDENCE
-                and days_of_cover is not None
-                and days_of_cover <= reorder_buffer
-            )
+            status in ('STOCK_OUT', 'CRITICAL', 'LOW_STOCK')
+            or (classification['below_min_treatment_course'] and usable <= 2)
         )
         if needs_stock:
-            target_level = max(6, int(daily_usage * 5)) if daily_usage > 0 else 6
+            target_level = max(6, int(daily_usage * 7)) if daily_usage > 0 else 6
             deficit = max(3, target_level - usable)
             recipients.append({
                 'facility': fac,
                 'stock': usable,
+                'stock_status': status,
                 'daily_usage': daily_usage,
                 'days_of_cover': days_of_cover,
                 'days_of_cover_display': fac.days_of_cover_display,
@@ -353,9 +358,10 @@ def find_redistribution_recommendations(state: str = None, max_distance_km: floa
                         'recipient_stock': rec['stock'],
                         'recipient_days_of_cover': rec['days_of_cover'],
                         'recipient_days_of_cover_display': rec['days_of_cover_display'],
+                        'recipient_stock_status': rec['stock_status'],
                         'suggested_quantity': suggested_qty,
                         'distance_km': min_dist,
-                        'urgency': 'CRITICAL' if rec['stock'] <= 2 else 'HIGH',
+                        'urgency': 'CRITICAL' if (rec['stock_status'] in ('STOCK_OUT', 'CRITICAL') or rec['stock'] <= 2) else 'HIGH',
                         'notice': 'Review for possible redistribution. Antivenom transfers require medical logistics authorization.'
                     })
 

@@ -1,18 +1,28 @@
 from django.utils import timezone
 from apps.facilities.models import Facility, UserRole
-from apps.facilities.permissions import get_user_role, get_user_assigned_state, is_demo_mode
+from apps.facilities.permissions import (
+    get_user_role, get_user_assigned_state, get_user_facility_id, is_demo_mode
+)
 from apps.analytics.models import Alert, AlertStatus
 
 
 def venomlink_global_context(request):
-    """Provides common context variables for government dashboard templates."""
+    """Provides common context variables for VenomLink dashboard templates."""
     role = get_user_role(request.user)
     assigned_state = get_user_assigned_state(request.user) if role == UserRole.STATE_OFFICIAL else ''
+    fac_id = get_user_facility_id(request.user) if role in (UserRole.FACILITY_ADMIN, UserRole.FACILITY_REPORTER) else None
 
     available_states_qs = Facility.objects.values_list('state', flat=True).distinct().order_by('state')
-    if assigned_state:
-        available_states = [assigned_state]
+    if role == UserRole.STATE_OFFICIAL:
+        available_states = [assigned_state] if assigned_state else []
         selected_state = assigned_state
+    elif role in (UserRole.FACILITY_ADMIN, UserRole.FACILITY_REPORTER):
+        fac_state = (
+            Facility.objects.filter(pk=fac_id).values_list('state', flat=True).first()
+            if fac_id else ''
+        )
+        available_states = [fac_state] if fac_state else []
+        selected_state = fac_state or ''
     else:
         available_states = list(available_states_qs) or ['Gombe', 'Plateau', 'Kaduna']
         selected_state = request.GET.get('state', '').strip()
@@ -22,7 +32,11 @@ def venomlink_global_context(request):
         selected_period = '30d'
 
     alerts_qs = Alert.objects.filter(status__in=[AlertStatus.ACTIVE, AlertStatus.ACKNOWLEDGED])
-    if selected_state:
+    if role == UserRole.STATE_OFFICIAL:
+        alerts_qs = alerts_qs.filter(facility__state__iexact=assigned_state) if assigned_state else alerts_qs.none()
+    elif role in (UserRole.FACILITY_ADMIN, UserRole.FACILITY_REPORTER):
+        alerts_qs = alerts_qs.filter(facility_id=fac_id) if fac_id else alerts_qs.none()
+    elif selected_state:
         alerts_qs = alerts_qs.filter(facility__state__iexact=selected_state)
 
     active_alerts_count = alerts_qs.count()
@@ -38,5 +52,9 @@ def venomlink_global_context(request):
         'user_role': role,
         'user_assigned_state': assigned_state,
         'demo_mode': is_demo_mode(),
-        'demo_mode_notice': "Demonstration environment. Stock information shown is simulated and must not be used for clinical decisions.",
+        'demo_mode_notice': (
+            "Prototype Demonstration Mode (USPF Changemaker Challenge 2026) — "
+            "Public dashboard exploration is enabled for evaluation only. "
+            "All facility records and stock figures shown are simulated and must not be used for clinical decisions."
+        ),
     }

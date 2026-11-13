@@ -1,0 +1,43 @@
+{% extends 'base.html' %}
+
+{% block title %}Staff Sign In — VENOMLINK (Prototype — USPF Changemaker Challenge 2026){% endblock %}
+
+{% block content %}
+<div style="max-width: 440px; margin: 40px auto;">
+  <div class="info-panel" style="padding: 28px;">
+    <h1 class="page-title" style="font-size: 1.35rem; margin-bottom: 6px;">VENOMLINK Operations Sign In</h1>
+    <p style="font-size: 0.84rem; color: #546E7A; margin-bottom: 20px;">
+      Prototype &mdash; USPF Changemaker Challenge 2026. Sign in with an authorised staff or system administrator account.
+    </p>
+
+    {% if form.errors %}
+      <div class="flash-alert error" style="margin-bottom: 16px;">
+        Invalid username or password. Please verify your credentials and try again.
+      </div>
+    {% endif %}
+
+    {% if next %}
+      <div class="flash-alert" style="background: #F1F3F0; border: 1px solid #D8DDD6; color: #263238; margin-bottom: 16px; font-size: 0.82rem;">
+        Authentication is required to access the requested operational view.
+      </div>
+    {% endif %}
+
+    <form method="post" action="{% url 'login' %}">
+      {% csrf_token %}
+      <input type="hidden" name="next" value="{{ next }}">
+
+      <div class="form-group">
+        <label class="form-label" for="id_username">Username</label>
+        <input type="text" name="username" id="id_username" class="form-control" required autofocus autocomplete="username">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="id_password">Password</label>
+        <input type="password" name="password" id="id_password" class="form-control" required autocomplete="current-password">
+      </div>
+
+      <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 8px;">Sign In</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

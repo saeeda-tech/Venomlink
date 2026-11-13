@@ -12,19 +12,18 @@ Returns explicit data quality / confidence indicators:
 """
 
 from datetime import timedelta
-from django.conf import settings
 from django.utils import timezone
 from apps.facilities.models import Facility, ConsumptionConfidence
+from .thresholds import classify_facility_stock, get_stock_threshold_config
 
 
 def calculate_facility_forecast(facility: Facility, window_days: int = 30) -> dict:
     """
     Computes stock intelligence metrics for a health facility without arbitrary fallbacks.
+    Status flags are derived strictly via the shared threshold classifier.
     """
-    cfg = getattr(settings, 'VENOMLINK_CONFIG', {})
-    stock_out_thresh = cfg.get('STOCK_OUT_THRESHOLD', 0)
-    crit_max_vials = cfg.get('CRITICAL_STOCK_MAX_VIALS', 2)
-    low_max_vials = cfg.get('LOW_STOCK_MAX_VIALS', 4)
+    tcfg = get_stock_threshold_config()
+    stock_out_thresh = tcfg['stock_out_threshold']
 
     physical_stock = facility.current_stock
     usable_stock = facility.usable_stock
@@ -47,24 +46,15 @@ def calculate_facility_forecast(facility: Facility, window_days: int = 30) -> di
         depletion_days = min(3650, int(days_of_cover))
         projected_depletion_date = (timezone.now().date() + timedelta(days=depletion_days)).isoformat()
 
-    # Evaluate critical and warning risk using independent vial thresholds first,
-    # then days-of-cover when consumption history has HIGH_CONFIDENCE.
-    is_critical = (
-        usable_stock <= crit_max_vials
-        or (
-            confidence == ConsumptionConfidence.HIGH_CONFIDENCE
-            and days_of_cover is not None
-            and days_of_cover <= reorder_buffer_days
-        )
+    classification = classify_facility_stock(
+        usable_stock=usable_stock,
+        has_expired_stock=facility.has_expired_stock,
+        is_stale=facility.is_stale,
+        days_of_cover=days_of_cover,
     )
-    is_warning = (not is_critical) and (
-        usable_stock <= low_max_vials
-        or (
-            confidence == ConsumptionConfidence.HIGH_CONFIDENCE
-            and days_of_cover is not None
-            and days_of_cover <= (reorder_buffer_days + 3)
-        )
-    )
+    stock_status = classification['stock_status']
+    is_critical = stock_status in ('STOCK_OUT', 'CRITICAL')
+    is_warning = stock_status == 'LOW_STOCK'
 
     return {
         'facility_id': facility.id,
@@ -84,6 +74,11 @@ def calculate_facility_forecast(facility: Facility, window_days: int = 30) -> di
         'safety_buffer_days': safety_buffer,
         'reorder_buffer_days': reorder_buffer_days,
         'projected_depletion_date': projected_depletion_date,
+        'stock_status': stock_status,
+        'below_min_treatment_course': classification['below_min_treatment_course'],
+        'min_treatment_course_vials': classification['min_treatment_course_vials'],
+        'critical_days_of_cover_threshold': classification['critical_days_of_cover_threshold'],
+        'warning_days_of_cover_threshold': classification['warning_days_of_cover_threshold'],
         'is_critical_stockout_risk': is_critical,
         'is_low_stock_warning': is_warning,
     }
